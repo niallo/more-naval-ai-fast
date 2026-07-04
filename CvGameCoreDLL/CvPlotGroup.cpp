@@ -223,6 +223,17 @@ void CvPlotGroup::changeNumBonuses(BonusTypes eBonus, int iChange)
 
 		//FAssertMsg(m_paiNumBonuses[eBonus] >= 0, "m_paiNumBonuses[eBonus] is expected to be non-negative (invalid Index)"); XXX
 
+#ifdef MNAI_PROFILE_BASE_BONUS_CACHE
+		for (int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
+		{
+			CvPlayerAI& kPlayer = GET_PLAYER((PlayerTypes)iPlayer);
+			if (kPlayer.isAlive())
+			{
+				kPlayer.AI_updateBonusValue(eBonus);
+			}
+		}
+#endif
+
 		pPlotNode = headPlotsNode();
 
 		while (pPlotNode != NULL)

@@ -1,0 +1,6 @@
+TOOLKIT = C:\Program Files\Civ4SDK\Microsoft Visual C++ Toolkit 2003
+PSDK = C:\Program Files\Civ4SDK\WindowsSDK
+CIV4_PATH = C:\GOG Games\Civilization IV Complete\Civ4\Beyond the Sword\CvGameCoreDLL
+YOURMOD = ..\build-output
+CUSTOM_CFLAGS =
+CUSTOM_LDFLAGS =

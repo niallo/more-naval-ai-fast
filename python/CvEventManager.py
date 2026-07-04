@@ -23,6 +23,7 @@ import CvTechChooser
 import CvIntroMovieScreen
 import CustomFunctions
 import ScenarioFunctions
+import AutoVerify
 
 #FfH: Card Game: begin
 import CvSomniumInterface
@@ -409,11 +410,13 @@ class CvEventManager:
 
 	def onLoadGame(self, argsList):
 		CvAdvisorUtils.resetNoLiberateCities()
+		AutoVerify.onLoadGame(argsList)
 		return 0
 
 	def onGameStart(self, argsList):
 		'Called at the start of the game'
-		
+		AutoVerify.onGameStart(argsList)
+
 		# lfgr 05/2020: Print some statistics
 		# Mostly borrowed from victory screen
 		print( "--------------------------" )
@@ -629,12 +632,14 @@ class CvEventManager:
 
 	def onGameEnd(self, argsList):
 		'Called at the End of the game'
+		AutoVerify.onGameEnd(argsList)
 		print("Game is ending")
 		return
 
 	def onBeginGameTurn(self, argsList):
 		'Called at the beginning of the end of each turn'
 		iGameTurn = argsList[0]
+		AutoVerify.onBeginGameTurn(argsList)
 
 		if not CyGame().isUnitClassMaxedOut(gc.getInfoTypeForString('UNITCLASS_ORTHUS'), 0):
 			if not CyGame().isOption(gc.getInfoTypeForString('GAMEOPTION_NO_ORTHUS')):
@@ -688,10 +693,12 @@ class CvEventManager:
 	def onEndGameTurn(self, argsList):
 		'Called at the end of the end of each turn'
 		iGameTurn = argsList[0]
+		AutoVerify.onEndGameTurn(argsList)
 
 	def onBeginPlayerTurn(self, argsList):
 		'Called at the beginning of a players turn'
 		iGameTurn, iPlayer = argsList
+		AutoVerify.onBeginPlayerTurn(argsList)
 		pPlayer = gc.getPlayer(iPlayer)
 		player = PyPlayer(iPlayer)
 
@@ -735,6 +742,7 @@ class CvEventManager:
 	def onEndPlayerTurn(self, argsList):
 		'Called at the end of a players turn'
 		iGameTurn, iPlayer = argsList
+		AutoVerify.onEndPlayerTurn(argsList)
 		pPlayer = gc.getPlayer(iPlayer)
 		if gc.getGame().getElapsedGameTurns() == 1:
 			if pPlayer.isHuman():
@@ -752,6 +760,7 @@ class CvEventManager:
 
 	def onEndTurnReady(self, argsList):
 		iGameTurn = argsList[0]
+		AutoVerify.onEndTurnReady(argsList)
 
 	def onFirstContact(self, argsList):
 	## Platy Builder ##

@@ -574,6 +574,8 @@ protected:
 	mutable int m_iUpgradeUnitsCachedExpThreshold;
 	mutable int m_iUpgradeUnitsCachedGold;
 
+	mutable int m_iTrueCombatValueCacheTurn;
+	mutable std::vector<int> m_aiTrueCombatValueCache;
 
 	int *m_aiNumTrainAIUnits;
 	int *m_aiNumAIUnits;

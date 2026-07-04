@@ -30,6 +30,10 @@
 #include "CvInfoCache.h" // lfgr 05/2024
 #include "CvInfoUtils.h" // lfgr 04/2020
 
+#ifdef MNAI_PROFILE_UPGRADE_LIST_CACHE
+#include <algorithm>
+#endif
+
 // BUG - start
 #include "CvBugOptions.h"
 // BUG - end
@@ -3511,8 +3515,8 @@ bool CvUnit::canMoveInto(const CvPlot* pPlot, bool bAttack, bool bDeclareWar, bo
 				{
 					if (DOMAIN_SEA != getDomainType() || pPlot->getTeam() != getTeam())  // sea units can enter impassable in own cultural borders
 					{
-						if (bIgnoreLoad || !canLoad(pPlot)) 
-						{ 
+						if (bIgnoreLoad || !canLoad(pPlot))
+						{
 							return false;
 						}
 					}
@@ -9075,6 +9079,42 @@ CvCity* CvUnit::getUpgradeCity(bool bSearch) const
 
 	int iBestSearchValue = MAX_INT;
 	CvCity* pBestUpgradeCity = NULL;
+
+#ifdef MNAI_PROFILE_UPGRADE_LIST_CACHE
+	if (!kPlayer.isAssimilation() && m_pUnitInfo->getUpgradeCiv() == NO_CIVILIZATION)
+	{
+		std::vector<UnitTypes> aeUpgradeUnits;
+		getInfoCache().computeAvailableUpgrades(kPlayer.getCivilizationType(), getUnitType(), aeUpgradeUnits);
+		std::sort(aeUpgradeUnits.begin(), aeUpgradeUnits.end());
+
+		for (size_t iI = 0; iI < aeUpgradeUnits.size(); iI++)
+		{
+			UnitTypes eLoopUnit = aeUpgradeUnits[iI];
+			int iNewValue = kPlayer.AI_unitValue(eLoopUnit, eUnitAI, pArea, true);
+			if (iNewValue > iCurrentValue)
+			{
+				int iSearchValue;
+				CvCity* pUpgradeCity = getUpgradeCity(eLoopUnit, bSearch, &iSearchValue);
+				if (pUpgradeCity != NULL)
+				{
+					// if not searching or close enough, then this match will do
+					if (!bSearch || iSearchValue < 16)
+					{
+						return pUpgradeCity;
+					}
+
+					if (iSearchValue < iBestSearchValue)
+					{
+						iBestSearchValue = iSearchValue;
+						pBestUpgradeCity = pUpgradeCity;
+					}
+				}
+			}
+		}
+
+		return pBestUpgradeCity;
+	}
+#endif
 
 	for (int iI = 0; iI < GC.getNumUnitInfos(); iI++)
 	{

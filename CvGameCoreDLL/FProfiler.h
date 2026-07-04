@@ -20,6 +20,7 @@
 #endif
 
 #ifdef CUSTOM_PROFILER
+struct ProfileSample;
 namespace custom_profiler
 {
 	void beginSample( ProfileSample* pSample );

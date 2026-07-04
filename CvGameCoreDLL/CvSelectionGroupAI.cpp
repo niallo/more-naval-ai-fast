@@ -13,6 +13,13 @@
 
 // Logging
 #include "BetterBTSAI.h"
+
+#ifdef MNAI_PROFILE_UNIT_UPDATE_DETAIL
+#define MNAI_PROFILE_SELECTION_GROUP_UPDATE(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_SELECTION_GROUP_UPDATE(name)
+#endif
+
 // Public Functions...
 
 CvSelectionGroupAI::CvSelectionGroupAI()
@@ -259,6 +266,8 @@ bool CvSelectionGroupAI::AI_update()
 		// if we want to force the group to attack, force another attack
 		if (m_bGroupAttack)
 		{
+			MNAI_PROFILE_SELECTION_GROUP_UPDATE("CvSelectionGroupAI::AI_update::group_attack");
+
 			m_bGroupAttack = false;
 
 			groupAttack(m_iGroupAttackX, m_iGroupAttackY, MOVE_DIRECT_ATTACK, bFailedAlreadyFighting);
@@ -275,10 +284,14 @@ bool CvSelectionGroupAI::AI_update()
 
 			resetPath();
 
+			{
+				MNAI_PROFILE_SELECTION_GROUP_UPDATE("CvSelectionGroupAI::AI_update::head_unit_update");
+
 			if (pHeadUnit->AI_update())
 			{
 				// AI_update returns true when we should abort the loop and wait until next slice
 				break;
+			}
 			}
 			if (iTempHack == 99)
 			{
@@ -310,6 +323,8 @@ bool CvSelectionGroupAI::AI_update()
 			// if we not group attacking, then check for follow action
 			if (!m_bGroupAttack)
 			{
+				MNAI_PROFILE_SELECTION_GROUP_UPDATE("CvSelectionGroupAI::AI_update::follow_units");
+
 				pEntityNode = headUnitNode();
 
 				while ((pEntityNode != NULL) && readyToMove(true))

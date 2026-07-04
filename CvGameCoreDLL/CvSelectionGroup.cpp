@@ -2864,9 +2864,17 @@ bool CvSelectionGroup::canMoveInto(CvPlot* pPlot, bool bAttack)
 	CLLNode<IDInfo>* pUnitNode;
 	CvUnit* pLoopUnit;
 
-	if (getNumUnits() > 0)
+	pUnitNode = headUnitNode();
+
+	if (pUnitNode != NULL)
 	{
-		pUnitNode = headUnitNode();
+		pLoopUnit = ::getUnit(pUnitNode->m_data);
+		pUnitNode = nextUnitNode(pUnitNode);
+
+		if (pLoopUnit->canMoveInto(pPlot, bAttack))
+		{
+			return true;
+		}
 
 		while (pUnitNode != NULL)
 		{
@@ -2889,9 +2897,17 @@ bool CvSelectionGroup::canMoveOrAttackInto(CvPlot* pPlot, bool bDeclareWar)
 	CLLNode<IDInfo>* pUnitNode;
 	CvUnit* pLoopUnit;
 
-	if (getNumUnits() > 0)
+	pUnitNode = headUnitNode();
+
+	if (pUnitNode != NULL)
 	{
-		pUnitNode = headUnitNode();
+		pLoopUnit = ::getUnit(pUnitNode->m_data);
+		pUnitNode = nextUnitNode(pUnitNode);
+
+		if (pLoopUnit->canMoveOrAttackInto(pPlot, bDeclareWar))
+		{
+			return true;
+		}
 
 		while (pUnitNode != NULL)
 		{
@@ -2914,9 +2930,17 @@ bool CvSelectionGroup::canMoveThrough(CvPlot* pPlot)
 	CLLNode<IDInfo>* pUnitNode;
 	CvUnit* pLoopUnit;
 
-	if (getNumUnits() > 0)
+	pUnitNode = headUnitNode();
+
+	if (pUnitNode != NULL)
 	{
-		pUnitNode = headUnitNode();
+		pLoopUnit = ::getUnit(pUnitNode->m_data);
+		pUnitNode = nextUnitNode(pUnitNode);
+
+		if (!(pLoopUnit->canMoveThrough(pPlot)))
+		{
+			return false;
+		}
 
 		while (pUnitNode != NULL)
 		{
@@ -2943,7 +2967,7 @@ bool CvSelectionGroup::canFight()
 
 	pUnitNode = headUnitNode();
 
-	while (pUnitNode != NULL)
+	if (pUnitNode != NULL)
 	{
 		pLoopUnit = ::getUnit(pUnitNode->m_data);
 		pUnitNode = nextUnitNode(pUnitNode);
@@ -2951,6 +2975,17 @@ bool CvSelectionGroup::canFight()
 		if (pLoopUnit->canFight())
 		{
 			return true;
+		}
+
+		while (pUnitNode != NULL)
+		{
+			pLoopUnit = ::getUnit(pUnitNode->m_data);
+			pUnitNode = nextUnitNode(pUnitNode);
+
+			if (pLoopUnit->canFight())
+			{
+				return true;
+			}
 		}
 	}
 
@@ -3334,9 +3369,17 @@ bool CvSelectionGroup::alwaysInvisible() const
 	CLLNode<IDInfo>* pUnitNode;
 	CvUnit* pLoopUnit;
 
-	if (getNumUnits() > 0)
+	pUnitNode = headUnitNode();
+
+	if (pUnitNode != NULL)
 	{
-		pUnitNode = headUnitNode();
+		pLoopUnit = ::getUnit(pUnitNode->m_data);
+		pUnitNode = nextUnitNode(pUnitNode);
+
+		if (!(pLoopUnit->alwaysInvisible()))
+		{
+			return false;
+		}
 
 		while (pUnitNode != NULL)
 		{
@@ -4807,7 +4850,13 @@ bool CvSelectionGroup::generatePath( const CvPlot* pFromPlot, const CvPlot* pToP
 
 	gDLL->getFAStarIFace()->SetData(&GC.getPathFinder(), this);
 
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+	mnaiBeginPathValidCache(this, iFlags);
+#endif
 	bSuccess = gDLL->getFAStarIFace()->GeneratePath(&GC.getPathFinder(), pFromPlot->getX_INLINE(), pFromPlot->getY_INLINE(), pToPlot->getX_INLINE(), pToPlot->getY_INLINE(), false, iFlags, bReuse);
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+	mnaiEndPathValidCache(this);
+#endif
 
 	if (piPathTurns != NULL)
 	{

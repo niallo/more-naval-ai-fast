@@ -1289,7 +1289,12 @@ void CvMap::invalidateIsActivePlayerNoDangerCache()
 
 		if( pLoopPlot != NULL )
 		{
-			pLoopPlot->setIsActivePlayerNoDangerCache(false);
+#ifdef MNAI_PROFILE_ACTIVE_DANGER_CACHE_SKIP_CLEAN
+			if (pLoopPlot->isActivePlayerNoDangerCache())
+#endif
+			{
+				pLoopPlot->setIsActivePlayerNoDangerCache(false);
+			}
 		}
 	}
 }

@@ -9262,20 +9262,28 @@ bool CvPlayer::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestEra, b
 {
 	PROFILE_FUNC();
 
-	if (!(pPlot->canBuild(eBuild, getID(), bTestVisible)))
+	if (eBuild == NO_BUILD)
 	{
 		return false;
 	}
 
-	if (GC.getBuildInfo(eBuild).getTechPrereq() != NO_TECH)
+	const CvBuildInfo& kBuild = GC.getBuildInfo(eBuild);
+	const TechTypes eTechPrereq = (TechTypes)kBuild.getTechPrereq();
+
+	if (eTechPrereq != NO_TECH)
 	{
-		if (!(GET_TEAM(getTeam()).isHasTech((TechTypes)GC.getBuildInfo(eBuild).getTechPrereq())))
+		if (!(GET_TEAM(getTeam()).isHasTech(eTechPrereq)))
 		{
-			if ((!bTestEra && !bTestVisible) || ((getCurrentRealEra() + 1) < GC.getTechInfo((TechTypes) GC.getBuildInfo(eBuild).getTechPrereq()).getEra()))
+			if ((!bTestEra && !bTestVisible) || ((getCurrentRealEra() + 1) < GC.getTechInfo(eTechPrereq).getEra()))
 			{
 				return false;
 			}
 		}
+	}
+
+	if (!(pPlot->canBuild(eBuild, getID(), bTestVisible)))
+	{
+		return false;
 	}
 
 	if (!bTestVisible)
@@ -9294,7 +9302,7 @@ bool CvPlayer::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestEra, b
 		if (pPlot->isFeatureRemove(eBuild))
 //<<<<Unofficial Bug Fix: End Modify
 		{
-			if (!(GET_TEAM(getTeam()).isHasTech((TechTypes)GC.getBuildInfo(eBuild).getFeatureTech(pPlot->getFeatureType()))))
+			if (!(GET_TEAM(getTeam()).isHasTech((TechTypes)kBuild.getFeatureTech(pPlot->getFeatureType()))))
 			{
 				return false;
 			}
@@ -13908,6 +13916,13 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 				}
 
 				doWarnings();
+
+#ifdef MNAI_AUTOVERIFY_AUTO_END_TURN
+				if (getID() == GC.getGameINLINE().getActivePlayer() && isHumanDisabled() && GC.getGameINLINE().getAIAutoPlay((PlayerTypes)getID()) > 0)
+				{
+					setEndTurn(true);
+				}
+#endif
 			}
 
 			if (getID() == GC.getGameINLINE().getActivePlayer())
@@ -15118,6 +15133,16 @@ void CvPlayer::changeBonusExport(BonusTypes eIndex, int iChange)
 		}
 		m_paiBonusExport[eIndex] = (m_paiBonusExport[eIndex] + iChange);
 		FAssert(getBonusExport(eIndex) >= 0);
+#ifdef MNAI_PROFILE_BASE_BONUS_CACHE
+		for (int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
+		{
+			CvPlayerAI& kPlayer = GET_PLAYER((PlayerTypes)iPlayer);
+			if (kPlayer.isAlive())
+			{
+				kPlayer.AI_updateBonusValue(eIndex);
+			}
+		}
+#endif
 		if (pCapitalCity != NULL)
 		{
 			pCapitalCity->plot()->updatePlotGroupBonus(true);
@@ -15150,6 +15175,16 @@ void CvPlayer::changeBonusImport(BonusTypes eIndex, int iChange)
 		}
 		m_paiBonusImport[eIndex] = (m_paiBonusImport[eIndex] + iChange);
 		FAssert(getBonusImport(eIndex) >= 0);
+#ifdef MNAI_PROFILE_BASE_BONUS_CACHE
+		for (int iPlayer = 0; iPlayer < MAX_PLAYERS; iPlayer++)
+		{
+			CvPlayerAI& kPlayer = GET_PLAYER((PlayerTypes)iPlayer);
+			if (kPlayer.isAlive())
+			{
+				kPlayer.AI_updateBonusValue(eIndex);
+			}
+		}
+#endif
 		if (pCapitalCity != NULL)
 		{
 			pCapitalCity->plot()->updatePlotGroupBonus(true);
@@ -26097,7 +26132,10 @@ void CvPlayer::setEndorsedResolution(VoteSourceTypes eVoteSource, const VoteSele
 }
 
 bool CvPlayer::isFullMember(VoteSourceTypes eVoteSource) const
-{PROFILE_FUNC()
+{
+#ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
+	PROFILE_FUNC();
+#endif
 #if defined(USE_OLD_CODE)
 	if (NO_RELIGION != GC.getGameINLINE().getVoteSourceReligion(eVoteSource))
 	{

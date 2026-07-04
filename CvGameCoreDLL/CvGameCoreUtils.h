@@ -26,6 +26,7 @@
 class CvPlot;
 class CvCity;
 class CvUnit;
+class CvSelectionGroup;
 class CvString;
 class CvRandom;
 class FAStarNode;
@@ -362,6 +363,10 @@ int pathHeuristic(int iFromX, int iFromY, int iToX, int iToY);
 int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
 int pathAdd(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+void mnaiBeginPathValidCache(const CvSelectionGroup* pSelectionGroup, int iFlags);
+void mnaiEndPathValidCache(const CvSelectionGroup* pSelectionGroup);
+#endif
 int stepDestValid(int iToX, int iToY, const void* pointer, FAStar* finder);
 int stepHeuristic(int iFromX, int iFromY, int iToX, int iToY);
 int stepValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);

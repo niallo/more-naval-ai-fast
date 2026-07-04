@@ -28,6 +28,93 @@
 #define PATH_STRAIGHT_WEIGHT									(1)
 
 #define PATH_DAMAGE_WEIGHT										(500)
+
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+static const CvSelectionGroup* g_pMNAIPathValidCacheGroup = NULL;
+static int g_iMNAIPathValidCacheFlags = 0;
+static int g_iMNAIPathValidCacheGeneration = 0;
+static std::vector<int> g_aiMNAIPathValidMoveThroughGeneration;
+static std::vector<char> g_abMNAIPathValidMoveThroughResult;
+static std::vector<int> g_aiMNAIPathValidMoveAttackGeneration;
+static std::vector<char> g_abMNAIPathValidMoveAttackResult;
+
+void mnaiBeginPathValidCache(const CvSelectionGroup* pSelectionGroup, int iFlags)
+{
+	const int iNumPlots = GC.getMapINLINE().numPlotsINLINE();
+
+	if ((int)g_aiMNAIPathValidMoveThroughGeneration.size() != iNumPlots)
+	{
+		g_aiMNAIPathValidMoveThroughGeneration.assign(iNumPlots, 0);
+		g_abMNAIPathValidMoveThroughResult.assign(iNumPlots, 0);
+		g_aiMNAIPathValidMoveAttackGeneration.assign(iNumPlots, 0);
+		g_abMNAIPathValidMoveAttackResult.assign(iNumPlots, 0);
+	}
+
+	g_iMNAIPathValidCacheGeneration++;
+	if (g_iMNAIPathValidCacheGeneration <= 0)
+	{
+		std::fill(g_aiMNAIPathValidMoveThroughGeneration.begin(), g_aiMNAIPathValidMoveThroughGeneration.end(), 0);
+		std::fill(g_aiMNAIPathValidMoveAttackGeneration.begin(), g_aiMNAIPathValidMoveAttackGeneration.end(), 0);
+		g_iMNAIPathValidCacheGeneration = 1;
+	}
+
+	g_pMNAIPathValidCacheGroup = pSelectionGroup;
+	g_iMNAIPathValidCacheFlags = iFlags;
+}
+
+void mnaiEndPathValidCache(const CvSelectionGroup* pSelectionGroup)
+{
+	if (g_pMNAIPathValidCacheGroup == pSelectionGroup)
+	{
+		g_pMNAIPathValidCacheGroup = NULL;
+		g_iMNAIPathValidCacheFlags = 0;
+	}
+}
+
+static int mnaiPathValidPlotIndex(const CvPlot* pPlot)
+{
+	return GC.getMapINLINE().plotNumINLINE(pPlot->getX_INLINE(), pPlot->getY_INLINE());
+}
+
+static bool mnaiPathValidCanMoveThrough(CvSelectionGroup* pSelectionGroup, CvPlot* pPlot)
+{
+	if (g_pMNAIPathValidCacheGroup != pSelectionGroup)
+	{
+		return pSelectionGroup->canMoveThrough(pPlot);
+	}
+
+	const int iPlot = mnaiPathValidPlotIndex(pPlot);
+	if (g_aiMNAIPathValidMoveThroughGeneration[iPlot] == g_iMNAIPathValidCacheGeneration)
+	{
+		return (g_abMNAIPathValidMoveThroughResult[iPlot] != 0);
+	}
+
+	const bool bResult = pSelectionGroup->canMoveThrough(pPlot);
+	g_aiMNAIPathValidMoveThroughGeneration[iPlot] = g_iMNAIPathValidCacheGeneration;
+	g_abMNAIPathValidMoveThroughResult[iPlot] = bResult ? 1 : 0;
+	return bResult;
+}
+
+static bool mnaiPathValidCanMoveOrAttackInto(CvSelectionGroup* pSelectionGroup, CvPlot* pPlot)
+{
+	if (g_pMNAIPathValidCacheGroup != pSelectionGroup)
+	{
+		return pSelectionGroup->canMoveOrAttackInto(pPlot);
+	}
+
+	const int iPlot = mnaiPathValidPlotIndex(pPlot);
+	if (g_aiMNAIPathValidMoveAttackGeneration[iPlot] == g_iMNAIPathValidCacheGeneration)
+	{
+		return (g_abMNAIPathValidMoveAttackResult[iPlot] != 0);
+	}
+
+	const bool bResult = pSelectionGroup->canMoveOrAttackInto(pPlot);
+	g_aiMNAIPathValidMoveAttackGeneration[iPlot] = g_iMNAIPathValidCacheGeneration;
+	g_abMNAIPathValidMoveAttackResult[iPlot] = bResult ? 1 : 0;
+	return bResult;
+}
+#endif
+
 CvPlot* plotCity(int iX, int iY, int iIndex)
 {
 
@@ -1611,6 +1698,7 @@ int pathDestValid(int iToX, int iToY, const void* pointer, FAStar* finder)
 	FAssert(pToPlot != NULL);
 
 	pSelectionGroup = ((CvSelectionGroup *)pointer);
+	const int iFinderInfo = gDLL->getFAStarIFace()->GetInfo(finder);
 
 	if (pSelectionGroup->atPlot(pToPlot))
 	{
@@ -1647,7 +1735,7 @@ int pathDestValid(int iToX, int iToY, const void* pointer, FAStar* finder)
 			}
 		}	
 
-		if (!(gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_IGNORE_DANGER))
+		if (!(iFinderInfo & MOVE_IGNORE_DANGER))
 		{
 			if (!(pSelectionGroup->canFight()) && !(pSelectionGroup->alwaysInvisible()))
 			{
@@ -1689,7 +1777,7 @@ int pathDestValid(int iToX, int iToY, const void* pointer, FAStar* finder)
 						{
 							if (pLoopUnit2->isGroupHead())
 							{
-								if (pLoopUnit2->getGroup()->canMoveOrAttackInto(pToPlot, (pSelectionGroup->AI_isDeclareWar(pToPlot) || (gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_DECLARE_WAR))))
+								if (pLoopUnit2->getGroup()->canMoveOrAttackInto(pToPlot, (pSelectionGroup->AI_isDeclareWar(pToPlot) || (iFinderInfo & MOVE_DECLARE_WAR))))
 								{
 									bValid = true;
 									break;
@@ -1709,7 +1797,7 @@ int pathDestValid(int iToX, int iToY, const void* pointer, FAStar* finder)
 		}
 		else
 		{
-			if (!(pSelectionGroup->canMoveOrAttackInto(pToPlot, (pSelectionGroup->AI_isDeclareWar(pToPlot) || (gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_DECLARE_WAR)))))
+			if (!(pSelectionGroup->canMoveOrAttackInto(pToPlot, (pSelectionGroup->AI_isDeclareWar(pToPlot) || (iFinderInfo & MOVE_DECLARE_WAR)))))
 			{
 				return FALSE;
 			}
@@ -1728,7 +1816,9 @@ int pathHeuristic(int iFromX, int iFromY, int iToX, int iToY)
 
 int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder)
 {
+#ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
 	PROFILE_FUNC();
+#endif
 
 	CLLNode<IDInfo>* pUnitNode;
 	CvSelectionGroup* pSelectionGroup;
@@ -1748,6 +1838,7 @@ int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer
 	FAssert(pToPlot != NULL);
 
 	pSelectionGroup = ((CvSelectionGroup *)pointer);
+	const int iFinderInfo = gDLL->getFAStarIFace()->GetInfo(finder);
 
 	iWorstCost = MAX_INT;
 	iWorstMovesLeft = MAX_INT;
@@ -1806,7 +1897,7 @@ int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer
 /* General AI                                                                                   */
 /************************************************************************************************/
 					// Add additional cost for ending turn in or adjacent to enemy territory based on flags
-					if (gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_AVOID_ENEMY_WEIGHT_3)
+					if (iFinderInfo & MOVE_AVOID_ENEMY_WEIGHT_3)
 					{
 						if (pToPlot->isOwned() && ((GET_TEAM(pSelectionGroup->getHeadTeam()).AI_getWarPlan(pToPlot->getTeam()) != NO_WARPLAN) || (pToPlot->getTeam() != pLoopUnit->getTeam() && pLoopUnit->isAlwaysHostile(pToPlot))))
 						{
@@ -1831,7 +1922,7 @@ int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer
 							}
 						}
 					}
-					else if (gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_AVOID_ENEMY_WEIGHT_2)
+					else if (iFinderInfo & MOVE_AVOID_ENEMY_WEIGHT_2)
 					{
 						if (pToPlot->isOwned() && ((GET_TEAM(pSelectionGroup->getHeadTeam()).AI_getWarPlan(pToPlot->getTeam()) != NO_WARPLAN) || (pToPlot->getTeam() != pLoopUnit->getTeam() && pLoopUnit->isAlwaysHostile(pToPlot))))
 						{
@@ -1844,7 +1935,7 @@ int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer
 							for (iI = 0; iI < NUM_DIRECTION_TYPES; iI++)
 							{
 								pAdjacentPlot = plotDirection(pToPlot->getX_INLINE(), pToPlot->getY_INLINE(), ((DirectionTypes)iI));
-								
+
 								if( pAdjacentPlot != NULL )
 								{
 									if (pAdjacentPlot->isOwned() && (atWar(pAdjacentPlot->getTeam(), pSelectionGroup->getHeadTeam()) || (pAdjacentPlot->getTeam() != pLoopUnit->getTeam() && pLoopUnit->isAlwaysHostile(pAdjacentPlot))))
@@ -1956,6 +2047,7 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 	FAssert(pToPlot != NULL);
 
 	pSelectionGroup = ((CvSelectionGroup *)pointer);
+	const int iFinderInfo = gDLL->getFAStarIFace()->GetInfo(finder);
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                      03/03/10                                jdog5000      */
 /*                                                                                              */
@@ -1982,7 +2074,7 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 		return TRUE;
 	}
 
-	if (gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_SAFE_TERRITORY)
+	if (iFinderInfo & MOVE_SAFE_TERRITORY)
 	{
 		PROFILE("pathValid move save");
 
@@ -2000,7 +2092,7 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 		}
 	}
 
-	if (gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_NO_ENEMY_TERRITORY)
+	if (iFinderInfo & MOVE_NO_ENEMY_TERRITORY)
 	{
 		PROFILE("pathValid no enemy");
 
@@ -2017,10 +2109,12 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 
 	if (bAIControl)
 	{
+#ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
 		PROFILE("pathValid danger & invisible");
+#endif
 		if ((parent->m_iData2 > 1) || (parent->m_iData1 == 0))
 		{
-			if (!(gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_IGNORE_DANGER))
+			if (!(iFinderInfo & MOVE_IGNORE_DANGER))
 			{
 				if (!(pSelectionGroup->canFight()) && !(pSelectionGroup->alwaysInvisible()))
 				{
@@ -2044,18 +2138,28 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 
 	if (bAIControl || pFromPlot->isRevealed(pSelectionGroup->getHeadTeam(), false))
 	{
+#ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
 		PROFILE("pathValid move through");
+#endif
 
-		if (gDLL->getFAStarIFace()->GetInfo(finder) & MOVE_THROUGH_ENEMY)
+		if (iFinderInfo & MOVE_THROUGH_ENEMY)
 		{
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+			if (!(mnaiPathValidCanMoveOrAttackInto(pSelectionGroup, pFromPlot)))
+#else
 			if (!(pSelectionGroup->canMoveOrAttackInto(pFromPlot)))
+#endif
 			{
 				return FALSE;
 			}
 		}
 		else
 		{
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+			if (!(mnaiPathValidCanMoveThrough(pSelectionGroup, pFromPlot)))
+#else
 			if (!(pSelectionGroup->canMoveThrough(pFromPlot)))
+#endif
 			{
 				return FALSE;
 			}

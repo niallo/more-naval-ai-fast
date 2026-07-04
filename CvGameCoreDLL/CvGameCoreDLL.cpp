@@ -146,6 +146,8 @@ namespace custom_profiler
 {
 	std::map<std::string, ProfileSample*> samples;
 	LARGE_INTEGER measurementFreq;
+	bool bCsvHeaderWritten = false;
+	ProfileSample turnSample( "Full turn or sample interval" );
 
 	// Start measurement for with the sample
 	void beginSample( ProfileSample* pSample )
@@ -153,6 +155,10 @@ namespace custom_profiler
 		if( ! pSample->bRegistered )
 		{
 			samples[std::string( pSample->Name )] = pSample;
+			pSample->ProfileInstances = 0;
+			pSample->OpenProfiles = 0;
+			pSample->StartTime = 0;
+			pSample->Accumulator = 0;
 			pSample->bRegistered = true;
 		}
 
@@ -223,21 +229,38 @@ namespace custom_profiler
 		gDLL->logMsg( "custom_profile.log", "total time - # called - # unclosed calls - name", false, false );
 		buffer.Format( "%d samples", samples.size() );
 		gDLL->logMsg( "custom_profile.log", buffer.c_str() );
+
+		if( ! bCsvHeaderWritten )
+		{
+			gDLL->logMsg( "custom_profile.csv", "turn,interval_ms,sample,total_ms,calls,open_profiles", false, false );
+			bCsvHeaderWritten = true;
+		}
+
+		const int iTurn = GC.getGameINLINE().getGameTurn();
+		const long iIntervalMs = (long) (turnSample.Accumulator * 1000 / measurementFreq.QuadPart);
+
 		for( size_t i = 0; i < vpSamples.size(); i++ )
 		{
 			if( vpSamples.at(i)->ProfileInstances >= 1 ) {
+				const long iSampleMs = (long) (vpSamples.at(i)->Accumulator * 1000 / measurementFreq.QuadPart);
 				buffer.Format( "%7ld\t%7u\t%3d\t%s",
-					(long) (vpSamples.at(i)->Accumulator * 1000 / measurementFreq.QuadPart), // ms
+					iSampleMs, // ms
 					vpSamples.at(i)->ProfileInstances,
 					vpSamples.at(i)->OpenProfiles,
 					vpSamples.at(i)->Name );
 				gDLL->logMsg( "custom_profile.log", buffer.c_str(), false, false );
+
+				buffer.Format( "%d,%ld,%s,%ld,%u,%d",
+					iTurn,
+					iIntervalMs,
+					vpSamples.at(i)->Name,
+					iSampleMs,
+					vpSamples.at(i)->ProfileInstances,
+					vpSamples.at(i)->OpenProfiles );
+				gDLL->logMsg( "custom_profile.csv", buffer.c_str(), false, false );
 			}
 		}
 	}
-	
-	// Special "total turn time" sample
-	ProfileSample turnSample( "Full turn or sample interval" );
 	
 } // end namespace custom_profiler
 #endif // CUSTOM_PROFILER

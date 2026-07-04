@@ -35,6 +35,12 @@
 // lfgr 03/2026
 #include "CvInfoCache.h"
 
+#ifdef MNAI_PROFILE_UNIT_UPDATE_DETAIL
+#define MNAI_PROFILE_UNIT_UPDATE(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_UNIT_UPDATE(name)
+#endif
+
 #define FOUND_RANGE				(7)
 
 // Public Functions...
@@ -114,6 +120,8 @@ bool CvUnitAI::AI_update()
 	// allow python to handle it for certain barbarians
     if (isBarbarian())
     {
+		MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::barbarian_python");
+
         CyUnit* pyUnit = new CyUnit(this);
         CyArgsList argsList;
         argsList.add(gDLL->getPythonIFace()->makePythonObject(pyUnit));	// pass in unit class
@@ -131,6 +139,8 @@ bool CvUnitAI::AI_update()
 	// TODO: make this section better
 	if (!GET_PLAYER(getOwnerINLINE()).isHuman())
     {
+		MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::ffh_pre");
+
 		// Tholal AI - Shades
 		if (getUnitClassType() == GC.getInfoTypeForString("UNITCLASS_SHADE"))
 		{
@@ -174,6 +184,9 @@ bool CvUnitAI::AI_update()
 /**	END	                                        												**/
 /*************************************************************************************************/
 
+	{
+		MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::early_guards");
+
 	if (getDomainType() == DOMAIN_LAND)
 	{
 		if (plot()->isWater() && !canMoveAllTerrain())
@@ -200,8 +213,12 @@ bool CvUnitAI::AI_update()
 	{
 		return false;
 	}
+	}
 
 //FfH: Added by Kael 10/26/2008
+	{
+		MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::construct_scan");
+
     if (!isBarbarian())
     {
         if (getLevel() < (isAnimal() ? 6 : 3))
@@ -234,6 +251,7 @@ bool CvUnitAI::AI_update()
             }
         }
     }
+	}
 /*************************************************************************************************/
 /**	BUGFIX (also AI Units can become Enraged) Sephi                             				**/
 /**																			                    **/
@@ -254,6 +272,8 @@ bool CvUnitAI::AI_update()
 **/
     if(isAIControl())
     {
+		MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::ai_control");
+
 		/*
         if (getGroup()->getNumUnits()>1)
         {
@@ -320,6 +340,8 @@ bool CvUnitAI::AI_update()
 
 	if (getGroup()->isAutomated())
 	{
+		MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::automated");
+
 		switch (getGroup()->getAutomateType())
 		{
 		case AUTOMATE_BUILD:
@@ -439,6 +461,9 @@ bool CvUnitAI::AI_update()
 /**	BETTER AI (UnitAI::AI_update) Sephi                                 	    				**/
 /*************************************************************************************************/
 
+		{
+			MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::non_automated_prep");
+
 		// Tholal ToDo - this section is kind of hacky. Figure out a way to remove it entirely and move the functionality to appropriate spots
         if (!isBarbarian())
 	    {
@@ -545,6 +570,7 @@ bool CvUnitAI::AI_update()
                 return false;
             }
 	    }
+		}
 /*************************************************************************************************/
 /**	END	                                        												**/
 /*************************************************************************************************/
@@ -553,6 +579,8 @@ bool CvUnitAI::AI_update()
 // lfgr 04/2021: Allow certain AI functions to be called when we can still cast, but not move anymore
 		if (AI_readyToMoveOrCast())
 		{
+			MNAI_PROFILE_UNIT_UPDATE("CvUnitAI::AI_update::unitai_dispatch");
+
 			switch (AI_getUnitAIType())
 			{
 			case UNITAI_UNKNOWN:
@@ -16301,9 +16329,8 @@ bool CvUnitAI::AI_safety()
 								{
 									iCount = 0;
 
-									pUnitNode = pLoopPlot->headUnitNode();
-
-									while (pUnitNode != NULL)
+										pUnitNode = pLoopPlot->headUnitNode();
+										while (pUnitNode != NULL)
 									{
 										pLoopUnit = ::getUnit(pUnitNode->m_data);
 										pUnitNode = pLoopPlot->nextUnitNode(pUnitNode);
@@ -17670,13 +17697,13 @@ bool CvUnitAI::AI_anyAttack(int iRange, int iOddsThreshold, int iMinStack, bool 
 
 			if (pLoopPlot != NULL)
 			{
-				if (AI_plotValid(pLoopPlot))
+				if( (bAllowCities) || !(pLoopPlot->isCity(false)) )
 				{
-					if( (bAllowCities) || !(pLoopPlot->isCity(false)) )
+					if (pLoopPlot->isVisibleEnemyUnit(this))
 					{
-						if (pLoopPlot->isVisibleEnemyUnit(this))
+						if (pLoopPlot->getNumVisibleEnemyDefenders(this) >= iMinStack)
 						{
-							if (pLoopPlot->getNumVisibleEnemyDefenders(this) >= iMinStack)
+							if (AI_plotValid(pLoopPlot))
 							{
 								if (!atPlot(pLoopPlot) && ((bFollow) ? canMoveInto(pLoopPlot, true) : (generatePath(pLoopPlot, 0, true, &iPathTurns) && (iPathTurns <= iRange))))
 								{
@@ -17685,9 +17712,7 @@ bool CvUnitAI::AI_anyAttack(int iRange, int iOddsThreshold, int iMinStack, bool 
 									bool bOnlySummons=true;
 									CLLNode<IDInfo>* pUnitNode;
 									CvUnit* pLoopUnit;
-
 									pUnitNode = pLoopPlot->headUnitNode();
-	
 									while (pUnitNode != NULL)
 									{
 										pLoopUnit = ::getUnit(pUnitNode->m_data);
@@ -17700,9 +17725,9 @@ bool CvUnitAI::AI_anyAttack(int iRange, int iOddsThreshold, int iMinStack, bool 
 										}
 									}
 
-									if (!bOnlySummons)
-									{
-										iValue = getGroup()->AI_attackOdds(pLoopPlot, true);
+										if (!bOnlySummons)
+										{
+											iValue = getGroup()->AI_attackOdds(pLoopPlot, true);
 
 										if (iValue >= AI_finalOddsThreshold(pLoopPlot, iOddsThreshold))
 										{
@@ -17710,18 +17735,17 @@ bool CvUnitAI::AI_anyAttack(int iRange, int iOddsThreshold, int iMinStack, bool 
 											{
 												iBestValue = iValue;
 												pBestPlot = ((bFollow) ? pLoopPlot : getPathEndTurnPlot());
-												FAssert(!atPlot(pBestPlot));
+													FAssert(!atPlot(pBestPlot));
+												}
 											}
 										}
-
+										// End Sephi AI
 									}
-									// End Sephi AI
 								}
-							}	
+							}
 						}
 					}
 				}
-			}
 		}
 	}
 
@@ -25633,7 +25657,9 @@ int CvUnitAI::AI_searchRange(int iRange)
 // XXX at some point test the game with and without this function...
 bool CvUnitAI::AI_plotValid(CvPlot* pPlot)
 {
+#ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
 	PROFILE_FUNC();
+#endif
 
 	if (m_pUnitInfo->isNoRevealMap() && willRevealByMove(pPlot))
 	{
