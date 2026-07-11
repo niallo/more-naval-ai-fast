@@ -1,254 +1,88 @@
 # More Naval AI Fast
 
+> **Civ IV AI turns: 848.7 → 163.3 ms. Same tested game state, 80.8% less waiting.**
+
 This repository is a working optimization fork of More Naval AI v2.9.3u for
 Fall from Heaven II / Civilization IV: Beyond the Sword. It is not the upstream
 MNAI project README; it is the local engineering workspace used to build,
 profile, benchmark, and continue improving a faster `CvGameCoreDLL.dll`.
 
-The workspace is intentionally agent-friendly. The detailed build log, accepted
-and rejected optimization history, wrapper setup notes, and continuation plan
-live in [AGENTS.md](AGENTS.md). The unattended benchmark harness is documented
-in [profiling/autoverify/README.md](profiling/autoverify/README.md).
+**Jump to:** [current performance](#current-state) ·
+[accepted optimizations](#what-is-optimized) · [builds](#build-releasefast) ·
+[benchmarking](#run-the-unattended-benchmark) ·
+[contributor workflow](#guidance-for-future-agents)
 
 ## Current State
 
-| Item | Current state |
-| --- | --- |
-| Player-facing build | Hook-free `ReleaseFast` with the complete accepted optimization stack, including `MNAI_OPT_CONTIGUOUS_TURN_UPDATES`. |
-| Installed fast-wrapper DLL | SHA256 `9cbfb4cc162bd145d1533e1c63fd17ace94524cd11a3e0a090099eaf6ad82e1d`. |
-| Installed wrapper Python | `CvGameUtils.py` SHA256 `587b1887ee587c0990754cea7e0bf8c500414db642fbf5346a67b516e0f31a3c`. |
-| Primary no-profiler result | **163.3 ms/turn** median over fixed-save turns 111-113; runs were 163.3, 162.3, and 172.0 ms/turn. |
-| Improvement | **-685.4 ms/turn / -80.8%** from the original 848.7 ms/turn baseline. |
-| Correctness evidence | Three trace runs reproduced the same turn 111-113 city/unit/group counts and deterministic state hashes as the flag-off baseline. |
-| Control wrapper | Original `More Naval AI.app` remains unchanged at DLL SHA256 `11d16cd60f5f7973dfc28aff18d95f6caab2041cd001438f05da7e2dcf4a9ab6`. |
-| Roadmap status | Numeric Gates A-D (400, 300, 212.2, and 169.7 ms/turn) are complete. Gate E at 127.3 ms/turn remains open. |
-
-The accepted `ReleaseFastVerify` evidence is
-`candidate-contiguous-turn-updates-releaseverify-batch-20260710-211556`.
-The matching fixed-cost trace moved from 582.0 to 170.7 ms/turn and reduced
-engine callback-gap time from 412.8 ms/turn to zero. The playable
-`ReleaseFast` DLL excludes AutoVerify, custom-profiler, release-trace,
-scheduler-trace, and fingerprint hooks.
-
-The current measured CPU work is about 168.5 ms/turn in `ReleaseFastTrace`.
-Its largest exclusive bands are `game_do_turn` (48.1 ms/turn),
-`player_do_turn_units` (19.3), `player_do_turn` (14.5), `generate_path` (13.1),
-`city_best_build` (13.0), and `city_do_turn` (11.7). Further work toward Gate E
-should target these exact CPU bands without weakening the scheduler guards or
-AI behavior.
-
-Current validation is strongest on the private primary save. The existing
-midgame, late-large, and early-pathing matrix numbers predate the contiguous
-turn-update optimization and should be rerun before they are presented as
-current performance. Raw saves and per-run artifacts remain local and are not
-committed.
-
-## Benchmark History
-
-The primary AutoVerify benchmark uses a fixed local save measured over turns
-111-113 only. The save itself is local test data and is not included in this
-repository.
+The player-facing `ReleaseFast` build is installed and playable. It contains
+the full accepted optimization stack, but none of the AutoVerify, custom
+profiler, release-trace, scheduler-trace, or fingerprint hooks used to measure
+it.
 
 ```text
-Baseline batch: profiling/autoverify/baseline-m3-batch-20260703-231157
-Baseline median: 848.7 ms/turn
-Best recorded no-profiler batch: profiling/autoverify/candidate-contiguous-turn-updates-releaseverify-batch-20260710-211556
-Best recorded no-profiler median: 163.3 ms/turn
-ReleaseFastVerify runs: 163.3, 162.3, 172.0 ms/turn
-Delta from original baseline: -685.4 ms/turn / -80.8%
-Matching ReleaseFastTrace baseline: 582.0 ms/turn
-Matching ReleaseFastTrace candidate: 170.7 ms/turn
-Matching trace delta: -411.3 ms/turn / -70.7%
-Installed player ReleaseFast DLL SHA256: 9cbfb4cc162bd145d1533e1c63fd17ace94524cd11a3e0a090099eaf6ad82e1d
-Installed fast-wrapper CvGameUtils.py SHA256: 587b1887ee587c0990754cea7e0bf8c500414db642fbf5346a67b516e0f31a3c
-Note: equivalent VC++ 2003/Wine rebuilds are not byte-stable; use benchmark
-batch paths and source flags as the performance evidence.
+Original   ████████████████████  848.7 ms/turn
+Current    ████                  163.3 ms/turn
 ```
 
-Validation gates passed for the accepted trace and release batches: three unattended runs completed,
-`PythonErr.log` was empty, `CivilizationIV.ini` was restored, transient
-`AutoVerify.ini` was removed, no `More Naval AI Fast.app` Wine process
-remained, and the original `More Naval AI.app` DLL hash was unchanged.
+| Fixed-save measurement | Before | Current | Result |
+| --- | ---: | ---: | ---: |
+| No-profiler AI turn | 848.7 ms | **163.3 ms** | **-80.8%** |
+| Release-trace turn | 582.0 ms | **170.7 ms** | **-70.7%** |
+| Idle engine callback gap | 412.8 ms | **0 ms** | Eliminated |
 
-The largest accepted improvement is `MNAI_OPT_CONTIGUOUS_TURN_UPDATES`. A
-fixed-cost release trace showed that 412.8 ms/turn—71% of the measured
-window—was idle time between engine callbacks even though no group was busy,
-in combat, or waiting on a mission timer. The optimization executes the next
-unchanged logical update slice immediately in single-player when there is no
-engine work or human input to wait for. It retains the original event/update
-order and yields on busy state, human input, multiplayer, WorldBuilder, and a
-fixed safety cap. Three candidate trace runs matched the baseline state hashes
-on every measured turn while callback-gap time fell to zero. The result clears
-the roadmap's 169.7 ms Gate D without AI-quality shortcuts or parallelism.
+Three independent no-profiler runs measured **163.3, 162.3, and 172.0
+ms/turn**. Three trace runs reproduced the flag-off baseline's deterministic
+state hashes and city/unit/group counts over every measured turn. No AI score,
+search-depth, RNG-order, or path approximation was traded for speed.
 
-An earlier accepted optimization, `MNAI_OPT_TOWER_MANA_OWNED_PLOT_SERVICE`, keeps
-the Tower Mastery state machine in Python but replaces its per-player whole-map
-mana scan with an exact bonus-class count over the accepted runtime owned-plot
-list. The candidate batch above improved 574.7 to 570.0 ms/turn in a paired
-same-session comparison. Its ProfileFast batch,
-`profiling/autoverify/profilefast-tower-mana-owned-plot-service-batch-20260709-233312`,
-measured 589.3 ms/turn versus the prior accepted 609.7 ms/turn attribution
-batch, while `CvPlayer::doTurn::tower_mastery` fell from 67 ms / 24 calls to
-0 ms / 24 calls. This is a different design from the previously rejected full
-C++ port and Python XML-ID cache.
+### What is running now
 
-A subsequent accepted `MNAI_OPT_PILLAGE_VALUE_BEFORE_PATH` candidate checks
-an exact pillage-score upper bound before pathfinding in `AI_pillageRange`.
-The release median improved from 570.0 to 564.7 ms/turn, and ProfileFast path
-requests in that caller fell from 98 to 83 per run while preserving original
-integer division and tie behavior.
+- `MNAI_OPT_CONTIGUOUS_TURN_UPDATES` removes safe-to-skip engine round trips
+  while still yielding for missions, combat, human input, multiplayer,
+  WorldBuilder, game over, and a fixed safety cap.
+- The original `More Naval AI.app` remains the untouched control; experiments
+  and the playable optimized DLL live only in `More Naval AI Fast.app`.
+- Numeric roadmap Gates A-D—400, 300, 212.2, and 169.7 ms/turn—are complete.
+  The next stretch target is **127.3 ms/turn**.
 
-The later accepted `MNAI_OPT_PATHVALID_MOVE_BEFORE_DANGER` candidate runs
-cached movement legality before danger checks in `pathValid`. ProfileFast
-attribution found 55,440 movement rejects versus only 1,528 danger rejects.
-The release candidate measured 565.7 ms/turn against a same-session clean
-570.7 ms/turn control (-5.0 ms / -0.9%); ProfileFast then reduced the danger
-band from 168,472 to 112,920 calls and `generatePath` from 164 to 149 ms.
-The historical pre-scheduler absolute best was 546.0 ms/turn; the accepted
-contiguous-update result above supersedes it at 163.3 ms/turn.
+### Where the remaining time hides
 
-Recent attribution/rejection: the ProfileFast city-growth sub-band batch
-`profiling/autoverify/profilefast-city-growth-subband-batch-20260710-001733`
-showed the measurable 8-9 ms growth-capacity band is almost entirely the
-already-known 7 ms good-tile/specialist scan. A subsequent exact target-city
-adjacent-score-before-path candidate measured 565.3 ms/turn versus the accepted
-564.7 ms/turn and was removed; see
-`candidate-target-city-adjacent-score-before-path-releaseverify-batch-20260710-002629`.
-An exact follow-up that hoisted unit-stable team, owner, group, and coordinate
-reads out of `AI_explore` / `AI_exploreRange` loops was also rejected: batch
-`candidate-explore-context-hoist-releaseverify-batch-20260710-004507`
-measured 566.3 ms/turn versus 564.7 ms/turn. The source and build flag were
-removed and the player wrapper was restored.
+`ReleaseFastTrace` accounts for about 168.5 ms/turn of current CPU work:
 
-Latest construct attribution/rejection: ProfileFast batch
-`profilefast-construct-path-context-batch-20260710-014010` attributed 18-19
-ms and 142 successful paths to `AI_construct`. The exact follow-up eligibility
-pre-scan duplicated enough XML/city work to regress to 571.7 ms/turn versus
-the accepted 565.7 ms/turn and was removed; see
-`candidate-construct-eligibility-before-path-releaseverify-batch-20260710-014906`.
-The ProfileFast caller context remains for broader build-service designs.
+| Exclusive phase | ms/turn |
+| --- | ---: |
+| Global end-turn work | 48.1 |
+| Player unit turns | 19.3 |
+| Other player-turn work | 14.5 |
+| Path generation | 13.1 |
+| City build planning | 13.0 |
+| City turns | 11.7 |
 
-The subsequent single-unit `pathCost` path-context candidate was also
-rejected: `candidate-pathcost-single-unit-path-context-releaseverify-batch-20260710-020716`
-measured 568.3 ms/turn versus the accepted 565.7 ms/turn. The original callback
-source and accepted player wrapper were restored.
+That makes Gate E a CPU-work problem, not a callback-wait problem. The next
+useful candidates should attack these shared services while preserving the
+guards and exact behavior that made the large scheduler win safe.
 
-Latest predicate attribution: `profilefast-canbuild-order-batch-20260710-022517`
-showed 41,130 of 55,521 `CvPlayer::canBuild` calls already reject at the
-accepted tech-first check, while only 68 reach and fail feature tech and none
-fail gold. This rules out another exact reorder before plot legality; the
-ProfileFast-only counters remain available.
+> **Benchmark scope:** current validation is strongest on the private primary
+> save over turns 111-113. The midgame, late-large, and early-pathing matrix
+> predates contiguous turn updates and needs a fresh run before its numbers are
+> treated as current.
 
-Latest rejected city-planning experiment:
-`candidate-city-build-validity-context-releaseverify-batch-20260709-225234`
-measured 617.7 ms/turn versus a contemporaneous clean
-`ReleaseFastVerify` control median of 580.3 ms/turn in
-`clean-city-build-validity-context-control-releaseverify-batch-20260709-230206`.
-The exact plot-scoped context replaced repeated per-improvement XML build scans
-with one build-legality scan per `AI_bestPlotBuild` call, but regressed by
-37.4 ms/turn / 6.4%, so it was removed. This reinforces that the next city-side
-candidate needs to change the broader work-planning/scoring shape rather than
-repackage build-validity scans.
+<details>
+<summary>Build fingerprints and benchmark evidence</summary>
 
-Benchmark matrix status: the primary benchmark remains the niallohiggins
-turn-0110 save over turns 111-113. The secondary local matrix now has
-3-run/one-turn baselines for midgame city/worker, late-large, and early-pathing
-saves: 846.0, 1407.0, and 954.0 ms/turn respectively. See
-[profiling/autoverify/MATRIX.md](profiling/autoverify/MATRIX.md) and
-`profiling/autoverify/matrix-run-20260706-105554.md`. Matrix save paths are
-local-only and are not committed.
+- Accepted batch:
+  `candidate-contiguous-turn-updates-releaseverify-batch-20260710-211556`
+- Player `ReleaseFast` DLL SHA256:
+  `9cbfb4cc162bd145d1533e1c63fd17ace94524cd11a3e0a090099eaf6ad82e1d`
+- Wrapper `CvGameUtils.py` SHA256:
+  `587b1887ee587c0990754cea7e0bf8c500414db642fbf5346a67b516e0f31a3c`
+- Control DLL SHA256:
+  `11d16cd60f5f7973dfc28aff18d95f6caab2041cd001438f05da7e2dcf4a9ab6`
 
-Profile attribution batch:
-`profiling/autoverify/profilefast-private-batch-20260704-134517`, median
-752.0 ms/turn, `Metric source: custom_profile`.
+Equivalent VC++ 2003/Wine builds are not byte-stable. Batch paths and source
+flags—not reproducible DLL hashes—are the authoritative performance evidence.
 
-Path-request attribution batch:
-`profiling/autoverify/profilefast-path-requests-batch-20260705-002808`,
-median 653.0 ms/turn, `Metric source: custom_profile`. This ProfileFast-only
-instrumentation found 3,107 `generatePath` calls in the median run, with only
-252 strict duplicate requests under owner/group/from/to/flags/reuse keys
-(8.1%), so future path work should focus beyond exact whole-path result
-dedupe.
-
-City-yield attribution batch:
-`profiling/autoverify/profilefast-city-yield-delta-context-batch-20260705-013702`,
-median 625.0 ms/turn, `Metric source: custom_profile`. The accepted
-`MNAI_OPT_CITY_YIELD_DELTA_CONTEXT` optimization reduced the median-run
-`CvCityAI::AI_yieldValue::yield_delta` aggregate from 201 ms to 42 ms,
-`CvCityAI::AI_plotValue` from 218 ms to 57 ms, and
-`CvCityAI::AI_assignWorkingPlots` from 245 ms to 114 ms versus
-`profilefast-cityyield-detail-batch-20260705-011825`.
-
-No-bonus vote-source attribution batch:
-`profiling/autoverify/profilefast-nobonus-votesource-first-batch-20260705-020138`,
-median 592.7 ms/turn, `Metric source: custom_profile`. The accepted
-`MNAI_OPT_NOBONUS_VOTE_SOURCE_FIRST` optimization checks the vote-source
-no-bonus table before calling `isFullMember` in hot bonus queries. In the
-median ProfileFast run, `CvPlayer::isFullMember` fell from 49 ms / 638,638
-calls to 0 ms / 4,774 calls, and the no-bonus callers disappeared from
-`full_member_callers.csv`.
-
-Attack-odds-before-path attribution batch:
-`profiling/autoverify/profilefast-attack-odds-before-path-batch-20260705-022736`,
-median 586.0 ms/turn, `Metric source: custom_profile`. The accepted
-`MNAI_OPT_ATTACK_ODDS_BEFORE_PATH` optimization tests exact attack odds before
-spending pathfinder work on low-odds `AI_cityAttack` and `AI_anyAttack`
-candidates. Median-run `generatePath` fell from 204 ms / 3,107 calls to
-161 ms / 2,796 calls versus
-`profilefast-nobonus-votesource-first-batch-20260705-020138`; path-attribution
-calls from `AI_anyAttack` fell from 298 to 46, and calls from `AI_cityAttack`
-fell from 68 to 9.
-
-Path-cost single-unit attribution batch:
-`profiling/autoverify/profilefast-pathcost-single-unit-next-skip-batch-20260705-031508`,
-median 585.3 ms/turn, `Metric source: custom_profile`. The accepted
-`MNAI_OPT_PATHCOST_SINGLE_UNIT_NEXT_SKIP` optimization avoids the linked-list
-advance helper inside `pathCost` for single-unit groups. It is a small exact
-loop optimization: the no-profiler release batch improved by 4.7 ms/turn, and
-the ProfileFast median moved from 586.0 to 585.3 ms/turn.
-
-Sticky path-valid attribution batch:
-`profiling/autoverify/profilefast-pathvalid-sticky-update-cache-batch-20260705-084627`,
-median 599.7 ms/turn, `Metric source: custom_profile`. The accepted
-`MNAI_OPT_PATHVALID_STICKY_UPDATE_CACHE` optimization reuses exact
-`pathValid` move-through/move-or-attack callback answers across repeated
-`generatePath` calls only inside one `CvUnitAI::AI_update` scope and only while
-the group state signature is unchanged. The release-path companion batch
-improved from 559.0 to 551.0 ms/turn; median ProfileFast `CvUnit::canMoveInto`
-calls fell from 30,457 to 29,371 and `pathValid danger & invisible` moved from
-31 ms to 30 ms.
-
-Route-territory owned-plot attribution batch:
-`profiling/autoverify/profilefast-route-territory-owned-plot-cache-batch-20260705-194614`,
-median 609.7 ms/turn, `Metric source: custom_profile`. The accepted
-`MNAI_OPT_ROUTE_TERRITORY_OWNED_PLOT_CACHE` optimization gives
-`AI_routeTerritory` a runtime owned-plot list so it scans owned plots in
-map-index order instead of every map plot while preserving the original
-candidate checks. The release-path companion batch improved from 551.0 to
-546.0 ms/turn; median ProfileFast `AI_routeTerritory` fell from 46 ms / 52
-calls to 1 ms / 52 calls, and its `plot_valid` sub-scan fell from 29 ms /
-133,120 calls to 0 ms / 2,842 calls.
-
-Unit-dispatch attribution batch:
-`profiling/autoverify/profilefast-unit-dispatch-detail-batch-20260705-092534`,
-median 603.7 ms/turn, `Metric source: custom_profile`. The ProfileFast-only
-`MNAI_PROFILE_UNIT_DISPATCH_DETAIL` markers showed the remaining dispatch cost
-is concentrated in workers and explorers: `dispatch_worker` 79 ms / 29 calls
-and `dispatch_explore` 72 ms / 22 calls in the median run.
-
-City-emphasis attribution batch:
-`profiling/autoverify/profilefast-city-emphasize-detail-batch-20260705-041905`,
-median 582.3 ms/turn, `Metric source: custom_profile`. The new
-`MNAI_PROFILE_CITY_EMPHASIZE_DETAIL` markers showed `CvCityAI::AI_doEmphasize`
-at 47 ms / 75 calls and `CvCityAI::AI_setEmphasize::assign_working_plots` at
-46 ms / 157 calls in the median run. A release candidate that folded the
-forced avoid-angry-citizens emphasis into the first setter call regressed to
-567.7 ms/turn, so future city-emphasis work should reduce reassignment shape
-more broadly rather than only removing that false/true pair.
-
-Legacy caveat: the older 652.3 ms/turn profile result mixed gameplay-code
-optimizations with profiler-overhead reductions. Use `ProfileFast` for hotspot
-attribution and `ReleaseFastVerify` for no-profiler release-path timing.
+</details>
 
 ## What Is Optimized
 
@@ -556,6 +390,9 @@ This chronology records the final experiments before
 "latest" wrapper or its DLL hash describe the state at that stage; the
 authoritative installed build and performance are in **Current State** above.
 
+<details>
+<summary>Open the pre-scheduler experiment log</summary>
+
 An earlier retained source change is ProfileFast-only attribution for
 `AI_ConquestMove` and `AI_pickTargetCity`. The fixed turns 111-113 profile put
 15 ms of the conquest routine in target-city selection and 4 ms in its late
@@ -649,3 +486,217 @@ improvement loop remained 70-73 ms. A release context was therefore not built.
 The markers remain for future comparisons, and the player wrapper is still on
 hook-free ReleaseFast SHA256
 `898071dcb021710f23f778dd18538ac8bca989c646c0dd18a4059fb97ca12976`.
+
+</details>
+
+## Benchmark History
+
+The primary AutoVerify benchmark uses a fixed local save measured over turns
+111-113 only. The save itself is local test data and is not included in this
+repository.
+
+<details>
+<summary>Open the full benchmark chronology</summary>
+
+```text
+Baseline batch: profiling/autoverify/baseline-m3-batch-20260703-231157
+Baseline median: 848.7 ms/turn
+Best recorded no-profiler batch: profiling/autoverify/candidate-contiguous-turn-updates-releaseverify-batch-20260710-211556
+Best recorded no-profiler median: 163.3 ms/turn
+ReleaseFastVerify runs: 163.3, 162.3, 172.0 ms/turn
+Delta from original baseline: -685.4 ms/turn / -80.8%
+Matching ReleaseFastTrace baseline: 582.0 ms/turn
+Matching ReleaseFastTrace candidate: 170.7 ms/turn
+Matching trace delta: -411.3 ms/turn / -70.7%
+Installed player ReleaseFast DLL SHA256: 9cbfb4cc162bd145d1533e1c63fd17ace94524cd11a3e0a090099eaf6ad82e1d
+Installed fast-wrapper CvGameUtils.py SHA256: 587b1887ee587c0990754cea7e0bf8c500414db642fbf5346a67b516e0f31a3c
+Note: equivalent VC++ 2003/Wine rebuilds are not byte-stable; use benchmark
+batch paths and source flags as the performance evidence.
+```
+
+Validation gates passed for the accepted trace and release batches: three unattended runs completed,
+`PythonErr.log` was empty, `CivilizationIV.ini` was restored, transient
+`AutoVerify.ini` was removed, no `More Naval AI Fast.app` Wine process
+remained, and the original `More Naval AI.app` DLL hash was unchanged.
+
+The largest accepted improvement is `MNAI_OPT_CONTIGUOUS_TURN_UPDATES`. A
+fixed-cost release trace showed that 412.8 ms/turn—71% of the measured
+window—was idle time between engine callbacks even though no group was busy,
+in combat, or waiting on a mission timer. The optimization executes the next
+unchanged logical update slice immediately in single-player when there is no
+engine work or human input to wait for. It retains the original event/update
+order and yields on busy state, human input, multiplayer, WorldBuilder, and a
+fixed safety cap. Three candidate trace runs matched the baseline state hashes
+on every measured turn while callback-gap time fell to zero. The result clears
+the roadmap's 169.7 ms Gate D without AI-quality shortcuts or parallelism.
+
+An earlier accepted optimization, `MNAI_OPT_TOWER_MANA_OWNED_PLOT_SERVICE`, keeps
+the Tower Mastery state machine in Python but replaces its per-player whole-map
+mana scan with an exact bonus-class count over the accepted runtime owned-plot
+list. The candidate batch above improved 574.7 to 570.0 ms/turn in a paired
+same-session comparison. Its ProfileFast batch,
+`profiling/autoverify/profilefast-tower-mana-owned-plot-service-batch-20260709-233312`,
+measured 589.3 ms/turn versus the prior accepted 609.7 ms/turn attribution
+batch, while `CvPlayer::doTurn::tower_mastery` fell from 67 ms / 24 calls to
+0 ms / 24 calls. This is a different design from the previously rejected full
+C++ port and Python XML-ID cache.
+
+A subsequent accepted `MNAI_OPT_PILLAGE_VALUE_BEFORE_PATH` candidate checks
+an exact pillage-score upper bound before pathfinding in `AI_pillageRange`.
+The release median improved from 570.0 to 564.7 ms/turn, and ProfileFast path
+requests in that caller fell from 98 to 83 per run while preserving original
+integer division and tie behavior.
+
+The later accepted `MNAI_OPT_PATHVALID_MOVE_BEFORE_DANGER` candidate runs
+cached movement legality before danger checks in `pathValid`. ProfileFast
+attribution found 55,440 movement rejects versus only 1,528 danger rejects.
+The release candidate measured 565.7 ms/turn against a same-session clean
+570.7 ms/turn control (-5.0 ms / -0.9%); ProfileFast then reduced the danger
+band from 168,472 to 112,920 calls and `generatePath` from 164 to 149 ms.
+The historical pre-scheduler absolute best was 546.0 ms/turn; the accepted
+contiguous-update result above supersedes it at 163.3 ms/turn.
+
+Recent attribution/rejection: the ProfileFast city-growth sub-band batch
+`profiling/autoverify/profilefast-city-growth-subband-batch-20260710-001733`
+showed the measurable 8-9 ms growth-capacity band is almost entirely the
+already-known 7 ms good-tile/specialist scan. A subsequent exact target-city
+adjacent-score-before-path candidate measured 565.3 ms/turn versus the accepted
+564.7 ms/turn and was removed; see
+`candidate-target-city-adjacent-score-before-path-releaseverify-batch-20260710-002629`.
+An exact follow-up that hoisted unit-stable team, owner, group, and coordinate
+reads out of `AI_explore` / `AI_exploreRange` loops was also rejected: batch
+`candidate-explore-context-hoist-releaseverify-batch-20260710-004507`
+measured 566.3 ms/turn versus 564.7 ms/turn. The source and build flag were
+removed and the player wrapper was restored.
+
+Latest construct attribution/rejection: ProfileFast batch
+`profilefast-construct-path-context-batch-20260710-014010` attributed 18-19
+ms and 142 successful paths to `AI_construct`. The exact follow-up eligibility
+pre-scan duplicated enough XML/city work to regress to 571.7 ms/turn versus
+the accepted 565.7 ms/turn and was removed; see
+`candidate-construct-eligibility-before-path-releaseverify-batch-20260710-014906`.
+The ProfileFast caller context remains for broader build-service designs.
+
+The subsequent single-unit `pathCost` path-context candidate was also
+rejected: `candidate-pathcost-single-unit-path-context-releaseverify-batch-20260710-020716`
+measured 568.3 ms/turn versus the accepted 565.7 ms/turn. The original callback
+source and accepted player wrapper were restored.
+
+Latest predicate attribution: `profilefast-canbuild-order-batch-20260710-022517`
+showed 41,130 of 55,521 `CvPlayer::canBuild` calls already reject at the
+accepted tech-first check, while only 68 reach and fail feature tech and none
+fail gold. This rules out another exact reorder before plot legality; the
+ProfileFast-only counters remain available.
+
+Latest rejected city-planning experiment:
+`candidate-city-build-validity-context-releaseverify-batch-20260709-225234`
+measured 617.7 ms/turn versus a contemporaneous clean
+`ReleaseFastVerify` control median of 580.3 ms/turn in
+`clean-city-build-validity-context-control-releaseverify-batch-20260709-230206`.
+The exact plot-scoped context replaced repeated per-improvement XML build scans
+with one build-legality scan per `AI_bestPlotBuild` call, but regressed by
+37.4 ms/turn / 6.4%, so it was removed. This reinforces that the next city-side
+candidate needs to change the broader work-planning/scoring shape rather than
+repackage build-validity scans.
+
+Benchmark matrix status: the primary benchmark remains the niallohiggins
+turn-0110 save over turns 111-113. The secondary local matrix now has
+3-run/one-turn baselines for midgame city/worker, late-large, and early-pathing
+saves: 846.0, 1407.0, and 954.0 ms/turn respectively. See
+[profiling/autoverify/MATRIX.md](profiling/autoverify/MATRIX.md) and
+`profiling/autoverify/matrix-run-20260706-105554.md`. Matrix save paths are
+local-only and are not committed.
+
+Profile attribution batch:
+`profiling/autoverify/profilefast-private-batch-20260704-134517`, median
+752.0 ms/turn, `Metric source: custom_profile`.
+
+Path-request attribution batch:
+`profiling/autoverify/profilefast-path-requests-batch-20260705-002808`,
+median 653.0 ms/turn, `Metric source: custom_profile`. This ProfileFast-only
+instrumentation found 3,107 `generatePath` calls in the median run, with only
+252 strict duplicate requests under owner/group/from/to/flags/reuse keys
+(8.1%), so future path work should focus beyond exact whole-path result
+dedupe.
+
+City-yield attribution batch:
+`profiling/autoverify/profilefast-city-yield-delta-context-batch-20260705-013702`,
+median 625.0 ms/turn, `Metric source: custom_profile`. The accepted
+`MNAI_OPT_CITY_YIELD_DELTA_CONTEXT` optimization reduced the median-run
+`CvCityAI::AI_yieldValue::yield_delta` aggregate from 201 ms to 42 ms,
+`CvCityAI::AI_plotValue` from 218 ms to 57 ms, and
+`CvCityAI::AI_assignWorkingPlots` from 245 ms to 114 ms versus
+`profilefast-cityyield-detail-batch-20260705-011825`.
+
+No-bonus vote-source attribution batch:
+`profiling/autoverify/profilefast-nobonus-votesource-first-batch-20260705-020138`,
+median 592.7 ms/turn, `Metric source: custom_profile`. The accepted
+`MNAI_OPT_NOBONUS_VOTE_SOURCE_FIRST` optimization checks the vote-source
+no-bonus table before calling `isFullMember` in hot bonus queries. In the
+median ProfileFast run, `CvPlayer::isFullMember` fell from 49 ms / 638,638
+calls to 0 ms / 4,774 calls, and the no-bonus callers disappeared from
+`full_member_callers.csv`.
+
+Attack-odds-before-path attribution batch:
+`profiling/autoverify/profilefast-attack-odds-before-path-batch-20260705-022736`,
+median 586.0 ms/turn, `Metric source: custom_profile`. The accepted
+`MNAI_OPT_ATTACK_ODDS_BEFORE_PATH` optimization tests exact attack odds before
+spending pathfinder work on low-odds `AI_cityAttack` and `AI_anyAttack`
+candidates. Median-run `generatePath` fell from 204 ms / 3,107 calls to
+161 ms / 2,796 calls versus
+`profilefast-nobonus-votesource-first-batch-20260705-020138`; path-attribution
+calls from `AI_anyAttack` fell from 298 to 46, and calls from `AI_cityAttack`
+fell from 68 to 9.
+
+Path-cost single-unit attribution batch:
+`profiling/autoverify/profilefast-pathcost-single-unit-next-skip-batch-20260705-031508`,
+median 585.3 ms/turn, `Metric source: custom_profile`. The accepted
+`MNAI_OPT_PATHCOST_SINGLE_UNIT_NEXT_SKIP` optimization avoids the linked-list
+advance helper inside `pathCost` for single-unit groups. It is a small exact
+loop optimization: the no-profiler release batch improved by 4.7 ms/turn, and
+the ProfileFast median moved from 586.0 to 585.3 ms/turn.
+
+Sticky path-valid attribution batch:
+`profiling/autoverify/profilefast-pathvalid-sticky-update-cache-batch-20260705-084627`,
+median 599.7 ms/turn, `Metric source: custom_profile`. The accepted
+`MNAI_OPT_PATHVALID_STICKY_UPDATE_CACHE` optimization reuses exact
+`pathValid` move-through/move-or-attack callback answers across repeated
+`generatePath` calls only inside one `CvUnitAI::AI_update` scope and only while
+the group state signature is unchanged. The release-path companion batch
+improved from 559.0 to 551.0 ms/turn; median ProfileFast `CvUnit::canMoveInto`
+calls fell from 30,457 to 29,371 and `pathValid danger & invisible` moved from
+31 ms to 30 ms.
+
+Route-territory owned-plot attribution batch:
+`profiling/autoverify/profilefast-route-territory-owned-plot-cache-batch-20260705-194614`,
+median 609.7 ms/turn, `Metric source: custom_profile`. The accepted
+`MNAI_OPT_ROUTE_TERRITORY_OWNED_PLOT_CACHE` optimization gives
+`AI_routeTerritory` a runtime owned-plot list so it scans owned plots in
+map-index order instead of every map plot while preserving the original
+candidate checks. The release-path companion batch improved from 551.0 to
+546.0 ms/turn; median ProfileFast `AI_routeTerritory` fell from 46 ms / 52
+calls to 1 ms / 52 calls, and its `plot_valid` sub-scan fell from 29 ms /
+133,120 calls to 0 ms / 2,842 calls.
+
+Unit-dispatch attribution batch:
+`profiling/autoverify/profilefast-unit-dispatch-detail-batch-20260705-092534`,
+median 603.7 ms/turn, `Metric source: custom_profile`. The ProfileFast-only
+`MNAI_PROFILE_UNIT_DISPATCH_DETAIL` markers showed the remaining dispatch cost
+is concentrated in workers and explorers: `dispatch_worker` 79 ms / 29 calls
+and `dispatch_explore` 72 ms / 22 calls in the median run.
+
+City-emphasis attribution batch:
+`profiling/autoverify/profilefast-city-emphasize-detail-batch-20260705-041905`,
+median 582.3 ms/turn, `Metric source: custom_profile`. The new
+`MNAI_PROFILE_CITY_EMPHASIZE_DETAIL` markers showed `CvCityAI::AI_doEmphasize`
+at 47 ms / 75 calls and `CvCityAI::AI_setEmphasize::assign_working_plots` at
+46 ms / 157 calls in the median run. A release candidate that folded the
+forced avoid-angry-citizens emphasis into the first setter call regressed to
+567.7 ms/turn, so future city-emphasis work should reduce reassignment shape
+more broadly rather than only removing that false/true pair.
+
+Legacy caveat: the older 652.3 ms/turn profile result mixed gameplay-code
+optimizations with profiler-overhead reductions. Use `ProfileFast` for hotspot
+attribution and `ReleaseFastVerify` for no-profiler release-path timing.
+
+</details>
