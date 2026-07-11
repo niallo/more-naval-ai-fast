@@ -10,9 +10,42 @@ and rejected optimization history, wrapper setup notes, and continuation plan
 live in [AGENTS.md](AGENTS.md). The unattended benchmark harness is documented
 in [profiling/autoverify/README.md](profiling/autoverify/README.md).
 
-## Current Result
+## Current State
 
-The current measured target was a fixed AutoVerify save measured over turns
+| Item | Current state |
+| --- | --- |
+| Player-facing build | Hook-free `ReleaseFast` with the complete accepted optimization stack, including `MNAI_OPT_CONTIGUOUS_TURN_UPDATES`. |
+| Installed fast-wrapper DLL | SHA256 `9cbfb4cc162bd145d1533e1c63fd17ace94524cd11a3e0a090099eaf6ad82e1d`. |
+| Installed wrapper Python | `CvGameUtils.py` SHA256 `587b1887ee587c0990754cea7e0bf8c500414db642fbf5346a67b516e0f31a3c`. |
+| Primary no-profiler result | **163.3 ms/turn** median over fixed-save turns 111-113; runs were 163.3, 162.3, and 172.0 ms/turn. |
+| Improvement | **-685.4 ms/turn / -80.8%** from the original 848.7 ms/turn baseline. |
+| Correctness evidence | Three trace runs reproduced the same turn 111-113 city/unit/group counts and deterministic state hashes as the flag-off baseline. |
+| Control wrapper | Original `More Naval AI.app` remains unchanged at DLL SHA256 `11d16cd60f5f7973dfc28aff18d95f6caab2041cd001438f05da7e2dcf4a9ab6`. |
+| Roadmap status | Numeric Gates A-D (400, 300, 212.2, and 169.7 ms/turn) are complete. Gate E at 127.3 ms/turn remains open. |
+
+The accepted `ReleaseFastVerify` evidence is
+`candidate-contiguous-turn-updates-releaseverify-batch-20260710-211556`.
+The matching fixed-cost trace moved from 582.0 to 170.7 ms/turn and reduced
+engine callback-gap time from 412.8 ms/turn to zero. The playable
+`ReleaseFast` DLL excludes AutoVerify, custom-profiler, release-trace,
+scheduler-trace, and fingerprint hooks.
+
+The current measured CPU work is about 168.5 ms/turn in `ReleaseFastTrace`.
+Its largest exclusive bands are `game_do_turn` (48.1 ms/turn),
+`player_do_turn_units` (19.3), `player_do_turn` (14.5), `generate_path` (13.1),
+`city_best_build` (13.0), and `city_do_turn` (11.7). Further work toward Gate E
+should target these exact CPU bands without weakening the scheduler guards or
+AI behavior.
+
+Current validation is strongest on the private primary save. The existing
+midgame, late-large, and early-pathing matrix numbers predate the contiguous
+turn-update optimization and should be rerun before they are presented as
+current performance. Raw saves and per-run artifacts remain local and are not
+committed.
+
+## Benchmark History
+
+The primary AutoVerify benchmark uses a fixed local save measured over turns
 111-113 only. The save itself is local test data and is not included in this
 repository.
 
@@ -500,11 +533,11 @@ pathfinder state, Python hooks, and save/OOS-sensitive behavior. A future
 multi-threaded design should start with read-only snapshot precompute and
 main-thread application of results.
 
-The active roadmap is intentionally aggressive: it targets 400, 300, 212.2,
-169.7, and 127.3 ms/turn gates before any small standalone micro-optimizations
-count as meaningful progress. The main work is shared pathing, tactical-map,
-city/worker, production, hierarchical-pathing, and deterministic snapshot
-precompute services. See the 75% target roadmap in [AGENTS.md](AGENTS.md).
+The numeric 400, 300, 212.2, and 169.7 ms/turn gates are complete. The open
+stretch target is 127.3 ms/turn. First rebaseline the secondary-save matrix
+with the contiguous-update build; then use the fixed-cost trace to select exact
+CPU-side pathing, city/worker, and player-turn services. See the roadmap and
+rejected-candidate ledger in [AGENTS.md](AGENTS.md).
 
 ## Upstream Context
 
@@ -516,7 +549,12 @@ Civilization IV. More Naval AI Unofficial is maintained by lfgr.
 - MNAI-U thread:
   <https://forums.civfanatics.com/threads/mnai-u-unofficial-build-bugfixes.645898/>
 
-## Latest Local Optimization Cycle
+## Historical Local Optimization Cycle (Pre-Scheduler)
+
+This chronology records the final experiments before
+`MNAI_OPT_CONTIGUOUS_TURN_UPDATES` was accepted. References below to the
+"latest" wrapper or its DLL hash describe the state at that stage; the
+authoritative installed build and performance are in **Current State** above.
 
 An earlier retained source change is ProfileFast-only attribution for
 `AI_ConquestMove` and `AI_pickTargetCity`. The fixed turns 111-113 profile put
