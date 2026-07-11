@@ -1424,14 +1424,7 @@ class CvGameUtils:
 			iRawMana = gc.getInfoTypeForString('BONUSCLASS_RAWMANA')
 			iMana = gc.getInfoTypeForString('BONUSCLASS_MANA')
 
-			possiblemana=0
-			for i in range (CyMap().numPlots()):
-				pPlot = CyMap().plotByIndex(i)
-				if pPlot.getOwner() == ePlayer:
-					iBonus = pPlot.getBonusType(TeamTypes.NO_TEAM)
-					if iBonus != -1:
-						if gc.getBonusInfo(iBonus).getBonusClassType() in [iMana, iRawMana]:
-							possiblemana += 1
+			possiblemana = pPlayer.countOwnedBonusesByClasses(iMana, iRawMana)
 
 			if possiblemana < 4:
 				return 0

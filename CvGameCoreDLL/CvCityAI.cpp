@@ -14,7 +14,141 @@
 #include "CvInfos.h"
 #include "FProfiler.h"
 
+#ifdef MNAI_PROFILE_CITY_ASSIGN_DETAIL
+#define MNAI_PROFILE_CITY_ASSIGN(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_CITY_ASSIGN(name)
+#endif
+
+#ifdef MNAI_PROFILE_CITY_YIELD_DETAIL
+#define MNAI_PROFILE_CITY_YIELD(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_CITY_YIELD(name)
+#endif
+
+#ifdef MNAI_PROFILE_CITY_EMPHASIZE_DETAIL
+#define MNAI_PROFILE_CITY_EMPHASIZE(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_CITY_EMPHASIZE(name)
+#endif
+
+#ifdef MNAI_PROFILE_BEST_PLOT_BUILD_DETAIL
+#define MNAI_PROFILE_BEST_PLOT_BUILD(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_BEST_PLOT_BUILD(name)
+#endif
+
+#ifdef MNAI_PROFILE_CITY_TURN_DETAIL
+#define MNAI_PROFILE_CITY_TURN(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_CITY_TURN(name)
+#endif
+
 #include "CvInfoCache.h"
+
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+struct MnaiCityYieldValueContext
+{
+	int aiBaseYieldRate[NUM_YIELD_TYPES];
+	int aiBaseYieldRateModifier[NUM_YIELD_TYPES];
+	int iProductionModifier;
+#ifdef MNAI_OPT_CITY_YIELD_STATIC_CONTEXT
+	int aiTotalCommerceRateModifier[NUM_COMMERCE_TYPES];
+	int aiCommercePercent[NUM_COMMERCE_TYPES];
+	int aiCommerceWeight[NUM_COMMERCE_TYPES];
+	int aiAverageCommerceExchange[NUM_COMMERCE_TYPES];
+	int aiAverageYieldMultiplier[NUM_YIELD_TYPES];
+	int aiSpecialYieldMultiplier[NUM_YIELD_TYPES];
+	bool abEmphasizeYield[NUM_YIELD_TYPES];
+	bool abEmphasizeCommerce[NUM_COMMERCE_TYPES];
+	bool bFoodIsProduction;
+	bool bCanPopRush;
+	bool bIsProduction;
+	bool bIsHuman;
+	int iFoodDifference;
+	int iFood;
+	int iGrowthThreshold;
+	int iHealthLevel;
+	int iHappinessLevel;
+	int iPopulation;
+	int iExtraFreeSpecialists;
+	int iWorkingPopulation;
+	int iYieldRateFood;
+	int iYieldRateProduction;
+	int iBestYieldAvailableFood;
+	int iMilitaryHappinessUnits;
+	int iOwnerNumCities;
+	int iHurryAngerTimer;
+	int iFlatHurryAngerLength;
+	int iConscriptAngerTimer;
+	int iFlatConscriptAngerLength;
+	int iDefyResolutionAngerTimer;
+	int iFlatDefyResolutionAngerLength;
+	int iMaxFoodKeptPercent;
+	int iHurryCostModifier;
+#endif
+};
+
+static void mnaiInitCityYieldValueContext(CvCityAI& kCity, MnaiCityYieldValueContext& kContext)
+{
+	CvPlayerAI& kOwner = GET_PLAYER(kCity.getOwnerINLINE());
+
+	for (int iI = 0; iI < NUM_YIELD_TYPES; iI++)
+	{
+		kContext.aiBaseYieldRate[iI] = kCity.getBaseYieldRate((YieldTypes)iI, false);
+		kContext.aiBaseYieldRateModifier[iI] = kCity.getBaseYieldRateModifier((YieldTypes)iI);
+#ifdef MNAI_OPT_CITY_YIELD_STATIC_CONTEXT
+		kContext.aiAverageYieldMultiplier[iI] = kOwner.AI_averageYieldMultiplier((YieldTypes)iI);
+		kContext.aiSpecialYieldMultiplier[iI] = kCity.AI_specialYieldMultiplier((YieldTypes)iI);
+		kContext.abEmphasizeYield[iI] = kCity.AI_isEmphasizeYield((YieldTypes)iI);
+#endif
+	}
+
+	kContext.iProductionModifier = kCity.getProductionModifier();
+
+#ifdef MNAI_OPT_CITY_YIELD_STATIC_CONTEXT
+	for (int iI = 0; iI < NUM_COMMERCE_TYPES; iI++)
+	{
+		kContext.aiTotalCommerceRateModifier[iI] = kCity.getTotalCommerceRateModifier((CommerceTypes)iI);
+		kContext.aiCommercePercent[iI] = kOwner.getCommercePercent((CommerceTypes)iI);
+		kContext.aiCommerceWeight[iI] = kOwner.AI_commerceWeight((CommerceTypes)iI);
+		kContext.aiAverageCommerceExchange[iI] = kOwner.AI_averageCommerceExchange((CommerceTypes)iI);
+		kContext.abEmphasizeCommerce[iI] = kCity.AI_isEmphasizeCommerce((CommerceTypes)iI);
+	}
+
+	kContext.bFoodIsProduction = kCity.isFoodProduction();
+	kContext.bCanPopRush = kOwner.canPopRush();
+	kContext.bIsProduction = kCity.isProduction();
+	kContext.bIsHuman = kCity.isHuman();
+	kContext.iFoodDifference = kCity.foodDifference(false);
+	kContext.iFood = kCity.getFood();
+	kContext.iGrowthThreshold = kCity.growthThreshold();
+	kContext.iHealthLevel = kCity.goodHealth() - kCity.badHealth(false, 0);
+	kContext.iHappinessLevel = kCity.isNoUnhappiness() ? std::max(3, kContext.iHealthLevel + 5) : kCity.happyLevel() - kCity.unhappyLevel(0);
+	kContext.iPopulation = kCity.getPopulation();
+	kContext.iExtraFreeSpecialists = kCity.extraFreeSpecialists();
+	kContext.iWorkingPopulation = kCity.getWorkingPopulation();
+	kContext.iYieldRateFood = kCity.getYieldRate(YIELD_FOOD);
+	kContext.iYieldRateProduction = kCity.getYieldRate(YIELD_PRODUCTION);
+	kContext.iBestYieldAvailableFood = kCity.getBestYieldAvailable(YIELD_FOOD);
+	kContext.iMilitaryHappinessUnits = kCity.getMilitaryHappinessUnits();
+	kContext.iOwnerNumCities = kOwner.getNumCities();
+	kContext.iHurryAngerTimer = kCity.getHurryAngerTimer();
+	kContext.iFlatHurryAngerLength = kCity.flatHurryAngerLength();
+	kContext.iConscriptAngerTimer = kCity.getConscriptAngerTimer();
+	kContext.iFlatConscriptAngerLength = kCity.flatConscriptAngerLength();
+	kContext.iDefyResolutionAngerTimer = kCity.getDefyResolutionAngerTimer();
+	kContext.iFlatDefyResolutionAngerLength = kCity.flatDefyResolutionAngerLength();
+	kContext.iMaxFoodKeptPercent = kCity.getMaxFoodKeptPercent();
+	kContext.iHurryCostModifier = kCity.getHurryCostModifier(true);
+#endif
+}
+
+#ifdef MNAI_OPT_CITY_YIELD_STATIC_CONTEXT
+#define MNAI_CITY_CONTEXT_VALUE(field, fallback) ((pMnaiYieldContext != NULL) ? pMnaiYieldContext->field : (fallback))
+#define MNAI_CITY_CONTEXT_ARRAY(field, index, fallback) ((pMnaiYieldContext != NULL) ? pMnaiYieldContext->field[index] : (fallback))
+#endif
+#endif
 
 #include "CvDLLPythonIFaceBase.h"
 #include "CvDLLInterfaceIFaceBase.h"
@@ -194,6 +328,7 @@ void CvCityAI::AI_reset()
 void CvCityAI::AI_doTurn()
 {
 	PROFILE_FUNC();
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_CITY_AI_DO_TURN);
 
 	int iI;
 
@@ -212,15 +347,19 @@ void CvCityAI::AI_doTurn()
 
 	if (!isHuman())
 	{
-		for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 		{
-			setForceSpecialistCount(((SpecialistTypes)iI), 0);
+			MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::reset_forced_specialists");
+			for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
+			{
+				setForceSpecialistCount(((SpecialistTypes)iI), 0);
+			}
 		}
 	}
 
     if (!isHuman())
 	{
-	    AI_stealPlots();
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::steal_plots");
+		AI_stealPlots();
 	}
 
 /************************************************************************************************/
@@ -234,14 +373,23 @@ void CvCityAI::AI_doTurn()
 	AI_updateBestBuild();
 */
 	if (!isDisorder()) // K-Mod
+	{
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::update_best_build");
 		AI_updateBestBuild();
+	}
 
-	AI_updateWorkersNeededHere();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::update_workers_needed_here");
+		AI_updateWorkersNeededHere();
+	}
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/
 
-	AI_updateRouteToCity();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::update_route_to_city");
+		AI_updateRouteToCity();
+	}
 
 	if (isHuman())
 	{
@@ -252,19 +400,32 @@ void CvCityAI::AI_doTurn()
 		return;
 	}
 
-	AI_doPanic();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::panic");
+		AI_doPanic();
+	}
 
-	AI_doDraft();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::draft");
+		AI_doDraft();
+	}
 
-	AI_doHurry();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::hurry");
+		AI_doHurry();
+	}
 
-	AI_doEmphasize();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCityAI::AI_doTurn::emphasize");
+		AI_doEmphasize();
+	}
 }
 
 
 void CvCityAI::AI_assignWorkingPlots()
 {
 	PROFILE_FUNC();
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_CITY_ASSIGN);
 
 	CvPlot* pHomePlot;
 	int iI;
@@ -277,6 +438,7 @@ void CvCityAI::AI_assignWorkingPlots()
 	// remove all assigned plots if we automated
 	if (!isHuman() || isCitizensAutomated())
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::clear_worked_plots");
 
 //FfH: Modified by Kael 11/18/2007
 //		for (iI = 0; iI < NUM_CITY_PLOTS; iI++)
@@ -289,39 +451,53 @@ void CvCityAI::AI_assignWorkingPlots()
 	}
 
 	//update the special yield multiplier to be current
-	AI_updateSpecialYieldMultiplier();
+	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::update_special_yield");
+		AI_updateSpecialYieldMultiplier();
+	}
 
 	// remove any plots we can no longer work for any reason
-	verifyWorkingPlots();
+	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::verify_working_plots");
+		verifyWorkingPlots();
+	}
 
 	// if forcing specialists, try to make all future specialists of the same type
 	bool bIsSpecialistForced = false;
 	int iTotalForcedSpecialists = 0;
 
-	// make sure at least the forced amount of specialists are assigned
-	for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 	{
-		int iForcedSpecialistCount = getForceSpecialistCount((SpecialistTypes)iI);
-		if (iForcedSpecialistCount > 0)
-		{
-			bIsSpecialistForced = true;
-			iTotalForcedSpecialists += iForcedSpecialistCount;
-		}
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::forced_specialist_reset");
 
-		if (!isHuman() || isCitizensAutomated() || (getSpecialistCount((SpecialistTypes)iI) < iForcedSpecialistCount))
+		// make sure at least the forced amount of specialists are assigned
+		for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 		{
-			setSpecialistCount(((SpecialistTypes)iI), iForcedSpecialistCount);
+			int iForcedSpecialistCount = getForceSpecialistCount((SpecialistTypes)iI);
+			if (iForcedSpecialistCount > 0)
+			{
+				bIsSpecialistForced = true;
+				iTotalForcedSpecialists += iForcedSpecialistCount;
+			}
+
+			if (!isHuman() || isCitizensAutomated() || (getSpecialistCount((SpecialistTypes)iI) < iForcedSpecialistCount))
+			{
+				setSpecialistCount(((SpecialistTypes)iI), iForcedSpecialistCount);
+			}
 		}
 	}
 
-	// if we have more specialists of any type than this city can have, reduce to the max
-	for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 	{
-		if (!isSpecialistValid((SpecialistTypes)iI))
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::cap_invalid_specialists");
+
+		// if we have more specialists of any type than this city can have, reduce to the max
+		for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 		{
-			if (getSpecialistCount((SpecialistTypes)iI) > getMaxSpecialistCount((SpecialistTypes)iI))
+			if (!isSpecialistValid((SpecialistTypes)iI))
 			{
-				setSpecialistCount(((SpecialistTypes)iI), getMaxSpecialistCount((SpecialistTypes)iI));
+				if (getSpecialistCount((SpecialistTypes)iI) > getMaxSpecialistCount((SpecialistTypes)iI))
+				{
+					setSpecialistCount(((SpecialistTypes)iI), getMaxSpecialistCount((SpecialistTypes)iI));
+				}
 			}
 		}
 	}
@@ -330,29 +506,38 @@ void CvCityAI::AI_assignWorkingPlots()
 	pHomePlot = getCityIndexPlot(CITY_HOME_PLOT);
 	if (pHomePlot != NULL)
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::home_plot");
 		setWorkingPlot(CITY_HOME_PLOT, ((getPopulation() > 0) && canWork(pHomePlot)));
 	}
 
-	// keep removing the worst citizen until we are not over the limit
-	while (extraPopulation() < 0)
 	{
-		if (!AI_removeWorstCitizen())
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::remove_over_limit");
+
+		// keep removing the worst citizen until we are not over the limit
+		while (extraPopulation() < 0)
 		{
-			FAssert(false);
-			break;
+			if (!AI_removeWorstCitizen())
+			{
+				FAssert(false);
+				break;
+			}
 		}
 	}
 
 	// extraSpecialists() is less than extraPopulation()
 	FAssertMsg(extraSpecialists() >= 0, "extraSpecialists() is expected to be non-negative (invalid Index)");
 
-	// do we have population unassigned
-	while (extraPopulation() > 0)
 	{
-		// (AI_addBestCitizen now handles forced specialist logic)
-		if (!AI_addBestCitizen(/*bWorkers*/ true, /*bSpecialists*/ true))
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::add_population");
+
+		// do we have population unassigned
+		while (extraPopulation() > 0)
 		{
-			break;
+			// (AI_addBestCitizen now handles forced specialist logic)
+			if (!AI_addBestCitizen(/*bWorkers*/ true, /*bSpecialists*/ true))
+			{
+				break;
+			}
 		}
 	}
 
@@ -361,6 +546,7 @@ void CvCityAI::AI_assignWorkingPlots()
 	int iExtraSpecialists = iInitialExtraSpecialists;
 	if (bIsSpecialistForced && iExtraSpecialists > 0)
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::forced_specialist_ratio");
 		FAssertMsg(iTotalForcedSpecialists > 0, "zero or negative total forced specialists");
 		for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 		{
@@ -395,18 +581,23 @@ void CvCityAI::AI_assignWorkingPlots()
 	}
 	FAssertMsg(iExtraSpecialists >= 0, "added too many specialists");
 
-	// if we still have population to assign, assign specialists
-	while (extraSpecialists() > 0)
 	{
-		if (!AI_addBestCitizen(/*bWorkers*/ false, /*bSpecialists*/ true))
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::fill_extra_specialists");
+
+		// if we still have population to assign, assign specialists
+		while (extraSpecialists() > 0)
 		{
-			break;
+			if (!AI_addBestCitizen(/*bWorkers*/ false, /*bSpecialists*/ true))
+			{
+				break;
+			}
 		}
 	}
 
 	// if automated, look for better choices than the current ones
 	if (!isHuman() || isCitizensAutomated())
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_assignWorkingPlots::juggle_citizens");
 		AI_juggleCitizens();
 	}
 
@@ -7560,7 +7751,10 @@ void CvCityAI::AI_setEmphasize(EmphasizeTypes eIndex, bool bNewValue)
 			}
 		}
 
-		AI_assignWorkingPlots();
+		{
+			MNAI_PROFILE_CITY_EMPHASIZE("CvCityAI::AI_setEmphasize::assign_working_plots");
+			AI_assignWorkingPlots();
+		}
 
 		if ((getOwnerINLINE() == GC.getGameINLINE().getActivePlayer()) && isCitySelected())
 		{
@@ -7574,8 +7768,6 @@ void CvCityAI::AI_setEmphasize(EmphasizeTypes eIndex, bool bNewValue)
 		gDLL->getInterfaceIFace()->setDirty(SelectionButtons_DIRTY_BIT, true);
 	}
 	// lfgr end
-
-
 }
 
 void CvCityAI::AI_forceEmphasizeCulture(bool bNewValue)
@@ -8114,29 +8306,39 @@ int CvCityAI::AI_getImprovementValue(CvPlot* pPlot, ImprovementTypes eImprovemen
 	}
 	else
 	{
-		int iValue;
-		for (int iJ = 0; iJ < GC.getNumBuildInfos(); iJ++)
-		{
-			BuildTypes eBuild = ((BuildTypes)iJ);
-
-			if (GC.getBuildInfo(eBuild).getImprovement() == eImprovement)
+			int iValue;
 			{
-				if (kOwner.canBuild(pPlot, eBuild, false))
+				MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_getImprovementValue::build_validity_scan");
+				for (int iJ = 0; iJ < GC.getNumBuildInfos(); iJ++)
 				{
-					iValue = 10000;
+					BuildTypes eBuild = ((BuildTypes)iJ);
 
-					iValue /= (GC.getBuildInfo(eBuild).getTime() + 1);
-
-					// XXX feature production???
-
-					if (iValue > iBestTempBuildValue)
+					if (GC.getBuildInfo(eBuild).getImprovement() != eImprovement)
 					{
-						iBestTempBuildValue = iValue;
-						eBestTempBuild = eBuild;
+						continue;
+					}
+
+					bool bCanBuildImprovement;
+					{
+						MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_getImprovementValue::build_validity_can_build");
+						bCanBuildImprovement = kOwner.canBuild(pPlot, eBuild, false);
+					}
+					if (bCanBuildImprovement)
+					{
+						iValue = 10000;
+
+						iValue /= (GC.getBuildInfo(eBuild).getTime() + 1);
+
+						// XXX feature production???
+
+						if (iValue > iBestTempBuildValue)
+						{
+							iBestTempBuildValue = iValue;
+							eBestTempBuild = eBuild;
+						}
 					}
 				}
 			}
-		}
 
 		if (eBestTempBuild != NO_BUILD)
 		{
@@ -8191,38 +8393,41 @@ int CvCityAI::AI_getImprovementValue(CvPlot* pPlot, ImprovementTypes eImprovemen
 	int aiDiffYields[NUM_YIELD_TYPES];
 	int aiFinalYields[NUM_YIELD_TYPES];
 
-	if (eBonus != NO_BONUS)
 	{
-		if (eNonObsoleteBonus != NO_BONUS)
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_getImprovementValue::bonus_discovery_scoring");
+		if (eBonus != NO_BONUS)
 		{
-			//if (GC.getImprovementInfo(eFinalImprovement).isImprovementBonusTrade(eNonObsoleteBonus))
-			if (kOwner.doesImprovementConnectBonus(eFinalImprovement, eNonObsoleteBonus))
+			if (eNonObsoleteBonus != NO_BONUS)
 			{
-				// K-Mod
-				iValue += (kOwner.AI_bonusVal(eNonObsoleteBonus, 1) * 50);
-				iValue += 100;
-				// K-Mod end
-			}
-			else
-			{
-				// K-Mod, bug fix. (original code deleted now.)
-				// Presumablly the original author wanted to subtract 1000 if eBestBuild would take away the bonus; not ... the nonsense they actually wrote.
-				if (kOwner.doesImprovementConnectBonus(eCurImprovement, eNonObsoleteBonus))
+				//if (GC.getImprovementInfo(eFinalImprovement).isImprovementBonusTrade(eNonObsoleteBonus))
+				if (kOwner.doesImprovementConnectBonus(eFinalImprovement, eNonObsoleteBonus))
 				{
-					// By the way, AI_bonusVal is typically 10 for the first bonus, and 2 for subsequent.
-					iValue -= (kOwner.AI_bonusVal(eNonObsoleteBonus, -1) * 50);
-					iValue -= 100;
+					// K-Mod
+					iValue += (kOwner.AI_bonusVal(eNonObsoleteBonus, 1) * 50);
+					iValue += 100;
+					// K-Mod end
+				}
+				else
+				{
+					// K-Mod, bug fix. (original code deleted now.)
+					// Presumablly the original author wanted to subtract 1000 if eBestBuild would take away the bonus; not ... the nonsense they actually wrote.
+					if (kOwner.doesImprovementConnectBonus(eCurImprovement, eNonObsoleteBonus))
+					{
+						// By the way, AI_bonusVal is typically 10 for the first bonus, and 2 for subsequent.
+						iValue -= (kOwner.AI_bonusVal(eNonObsoleteBonus, -1) * 50);
+						iValue -= 100;
+					}
 				}
 			}
 		}
-	}
-	else
-	{
-		for (int iJ = 0; iJ < GC.getNumBonusInfos(); iJ++)
+		else
 		{
-			if (GC.getImprovementInfo(eFinalImprovement).getImprovementBonusDiscoverRand(iJ) > 0)
+			for (int iJ = 0; iJ < GC.getNumBonusInfos(); iJ++)
 			{
-				iValue++;
+				if (GC.getImprovementInfo(eFinalImprovement).getImprovementBonusDiscoverRand(iJ) > 0)
+				{
+					iValue++;
+				}
 			}
 		}
 	}
@@ -8230,8 +8435,10 @@ int CvCityAI::AI_getImprovementValue(CvPlot* pPlot, ImprovementTypes eImprovemen
 	//if (iValue >= 0) // condition disabled by K-Mod. (maybe the yield will be worth it!)
 	{
 		iValue *= 2;
-		for (int iJ = 0; iJ < NUM_YIELD_TYPES; iJ++)
 		{
+			MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_getImprovementValue::yield_diff_loop");
+			for (int iJ = 0; iJ < NUM_YIELD_TYPES; iJ++)
+			{
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                      10/06/09                                jdog5000      */
 /*                                                                                              */
@@ -8259,14 +8466,18 @@ int CvCityAI::AI_getImprovementValue(CvPlot* pPlot, ImprovementTypes eImprovemen
 			aiFinalYields[iJ] += (pPlot->calculateImprovementYieldChange(eImprovement, ((YieldTypes)iJ), getOwnerINLINE(), false, true));
 			/* if (bIgnoreFeature && pPlot->getFeatureType() != NO_FEATURE)
 			{
-				aiFinalYields[iJ] -= 2 * GC.getFeatureInfo(pPlot->getFeatureType()).getYieldChange((YieldTypes)iJ);							
+				aiFinalYields[iJ] -= 2 * GC.getFeatureInfo(pPlot->getFeatureType()).getYieldChange((YieldTypes)iJ);
 			} */ // disabled by K-Mod. (this is already taken into account with bIgnoreFeature in calculateNatureYield)
 			// K-Mod note: these calculations currently do not take the 'financial' bonus into account.
 			// They probably should take that bonus into account. But it would be a bit messy to code and I don't want to do it right now.
 
 //>>>>Better AI: Modified by Denev 2010/05/03
 //					int iCurYield = 2*(pPlot->calculateNatureYield(((YieldTypes)iJ), getTeam(), false));
-					int iCurYield = 2*(pPlot->calculateNatureYield(((YieldTypes)iJ), getOwnerINLINE(), false));
+						int iCurYield;
+						{
+							MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_getImprovementValue::current_nature_yield");
+							iCurYield = 2*(pPlot->calculateNatureYield(((YieldTypes)iJ), getOwnerINLINE(), false));
+						}
 //<<<<Better AI: End Modify
 
 			if( eCurImprovement != NO_IMPROVEMENT )
@@ -8276,14 +8487,18 @@ int CvCityAI::AI_getImprovementValue(CvPlot* pPlot, ImprovementTypes eImprovemen
 				{
 					eCurFinalImprovement = eCurImprovement;
 				}
-				iCurYield += (pPlot->calculateImprovementYieldChange(eCurFinalImprovement, ((YieldTypes)iJ), getOwnerINLINE(), false, true));
-				iCurYield += (pPlot->calculateImprovementYieldChange(eCurImprovement, ((YieldTypes)iJ), getOwnerINLINE(), false, true));
+					{
+						MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_getImprovementValue::current_improvement_yields");
+						iCurYield += (pPlot->calculateImprovementYieldChange(eCurFinalImprovement, ((YieldTypes)iJ), getOwnerINLINE(), false, true));
+						iCurYield += (pPlot->calculateImprovementYieldChange(eCurImprovement, ((YieldTypes)iJ), getOwnerINLINE(), false, true));
+					}
 			}
 
 			aiDiffYields[iJ] = (aiFinalYields[iJ] - iCurYield);
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/
+			}
 		}
 
 		// K-Mod
@@ -8293,6 +8508,8 @@ int CvCityAI::AI_getImprovementValue(CvPlot* pPlot, ImprovementTypes eImprovemen
 		Unfortunately, it's a bit of a lengthy calculation to work out all of the factors involved in iFoodPriority.
 		So I'll just use a very rough approximation. Hopefully it will be better than nothing.
 		*/
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_getImprovementValue::final_scoring");
+
 		int iCorrectedFoodPriority = iFoodPriority;
 		if (aiDiffYields[YIELD_FOOD] && isWorkingPlot(pPlot))
 		{
@@ -8604,6 +8821,8 @@ int CvCityAI::AI_countBestBuilds(CvArea* pArea) const
 // Note: this function has been somewhat mangled by K-Mod
 void CvCityAI::AI_updateBestBuild()
 {
+	MNAI_PATH_REQUEST_CONTEXT("CvCityAI::AI_updateBestBuild");
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_CITY_BEST_BUILD);
 	int iFoodMultiplier, iProductionMultiplier, iCommerceMultiplier, iDesiredFoodChange;
 	CvPlayerAI& kOwner = GET_PLAYER(getOwnerINLINE()); // K-Mod
 
@@ -9732,7 +9951,11 @@ void CvCityAI::AI_doEmphasize()
 		bFirstTech = false;
 	}
 
-	int iPopulationRank = findPopulationRank();
+	int iPopulationRank;
+	{
+		MNAI_PROFILE_CITY_EMPHASIZE("CvCityAI::AI_doEmphasize::population_rank");
+		iPopulationRank = findPopulationRank();
+	}
 
 	for (iI = 0; iI < GC.getNumEmphasizeInfos(); iI++)
 	{
@@ -9748,7 +9971,13 @@ void CvCityAI::AI_doEmphasize()
 
 		}
 
-		if (AI_specialYieldMultiplier(YIELD_PRODUCTION) < 50)
+		int iProductionMultiplier;
+		{
+			MNAI_PROFILE_CITY_EMPHASIZE("CvCityAI::AI_doEmphasize::production_multiplier");
+			iProductionMultiplier = AI_specialYieldMultiplier(YIELD_PRODUCTION);
+		}
+
+		if (iProductionMultiplier < 50)
 		{
 			if (GC.getEmphasizeInfo((EmphasizeTypes)iI).getYieldChange(YIELD_COMMERCE) > 0)
 			{
@@ -9777,30 +10006,33 @@ void CvCityAI::AI_doEmphasize()
 				int iHighHammerTotal = 0;
 				int iGoodFoodSink = 0;
 				int iFoodPerPop = GC.getFOOD_CONSUMPTION_PER_POPULATION();
+				{
+					MNAI_PROFILE_CITY_EMPHASIZE("CvCityAI::AI_doEmphasize::great_people_plot_summary");
 //>>>>Unofficial Bug Fix: Modified by Denev 2010/04/04
 //				for (int iPlot = 0; iPlot < NUM_CITY_PLOTS; iPlot++)
-				for (int iPlot = 0; iPlot < getNumCityPlots(); iPlot++)
+					for (int iPlot = 0; iPlot < getNumCityPlots(); iPlot++)
 //<<<<Unofficial Bug Fix: End Modify
-				{
-					CvPlot* pLoopPlot = plotCity(getX_INLINE(), getY_INLINE(), iPlot);
-					if (pLoopPlot != NULL && pLoopPlot->getWorkingCity() == this)
 					{
-						int iFood = pLoopPlot->getYield(YIELD_FOOD);
-						if (iFood > iFoodPerPop)
+						CvPlot* pLoopPlot = plotCity(getX_INLINE(), getY_INLINE(), iPlot);
+						if (pLoopPlot != NULL && pLoopPlot->getWorkingCity() == this)
 						{
-							iHighFoodTotal += iFood;
-							iHighFoodPlotCount++;
-						}
-						int iHammers = pLoopPlot->getYield(YIELD_PRODUCTION);
-						if ((iHammers >= 3) && ((iHammers + iFood) >= 4))
-						{
-							iHighHammerPlotCount++;
-							iHighHammerTotal += iHammers;
-						}
-						int iCommerce = pLoopPlot->getYield(YIELD_COMMERCE);
-						if ((iCommerce * 2 + iHammers * 3) > 9)
-						{
-							iGoodFoodSink += std::max(0, iFoodPerPop - iFood);
+							int iFood = pLoopPlot->getYield(YIELD_FOOD);
+							if (iFood > iFoodPerPop)
+							{
+								iHighFoodTotal += iFood;
+								iHighFoodPlotCount++;
+							}
+							int iHammers = pLoopPlot->getYield(YIELD_PRODUCTION);
+							if ((iHammers >= 3) && ((iHammers + iFood) >= 4))
+							{
+								iHighHammerPlotCount++;
+								iHighHammerTotal += iHammers;
+							}
+							int iCommerce = pLoopPlot->getYield(YIELD_COMMERCE);
+							if ((iCommerce * 2 + iHammers * 3) > 9)
+							{
+								iGoodFoodSink += std::max(0, iFoodPerPop - iFood);
+							}
 						}
 					}
 				}
@@ -9809,16 +10041,24 @@ void CvCityAI::AI_doEmphasize()
 				{
 					if ((iHighHammerPlotCount < 2) && (iHighHammerTotal < (getPopulation())))
 					{
-						if (AI_countGoodTiles(true, false, 100, true) < getPopulation())
+						int iGoodTileCount;
+						{
+							MNAI_PROFILE_CITY_EMPHASIZE("CvCityAI::AI_doEmphasize::great_people_good_tiles");
+							iGoodTileCount = AI_countGoodTiles(true, false, 100, true);
+						}
+						if (iGoodTileCount < getPopulation())
 						{
 							bEmphasize = true;
 						}
 					}
+					}
 				}
-			}
 		}
 
-		AI_setEmphasize(((EmphasizeTypes)iI), bEmphasize);
+		{
+			MNAI_PROFILE_CITY_EMPHASIZE("CvCityAI::AI_doEmphasize::set_emphasize");
+			AI_setEmphasize(((EmphasizeTypes)iI), bEmphasize);
+		}
 
 /*************************************************************************************************/
 /**	BETTER AI (GrowthControl for AI) Sephi                                     					**/
@@ -9827,6 +10067,7 @@ void CvCityAI::AI_doEmphasize()
 /*************************************************************************************************/
 		if (GC.getEmphasizeInfo((EmphasizeTypes)iI).isAvoidAngryCitizens())
 		{
+			MNAI_PROFILE_CITY_EMPHASIZE("CvCityAI::AI_doEmphasize::force_avoid_angry");
 		    AI_setEmphasize(((EmphasizeTypes)iI), true);
 		}
 /*************************************************************************************************/
@@ -10203,19 +10444,24 @@ bool CvCityAI::AI_addBestCitizen(bool bWorkers, bool bSpecialists, int* piBestPl
 	{
 		// count the total forced specialists
 		int iTotalForcedSpecialists = 0;
-		for (int iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 		{
-			int iForcedSpecialistCount = getForceSpecialistCount((SpecialistTypes)iI);
-			if (iForcedSpecialistCount > 0)
+			MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_addBestCitizen::count_forced_specialists");
+
+			for (int iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 			{
-				bIsSpecialistForced = true;
-				iTotalForcedSpecialists += iForcedSpecialistCount;
+				int iForcedSpecialistCount = getForceSpecialistCount((SpecialistTypes)iI);
+				if (iForcedSpecialistCount > 0)
+				{
+					bIsSpecialistForced = true;
+					iTotalForcedSpecialists += iForcedSpecialistCount;
+				}
 			}
 		}
 
 		// if forcing any specialists, find the best one that we can still assign
 		if (bIsSpecialistForced)
 		{
+			MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_addBestCitizen::forced_specialist_scan");
 			int iBestForcedValue = MIN_INT;
 
 			int iTotalSpecialists = 1 + getSpecialistPopulation();
@@ -10251,6 +10497,7 @@ bool CvCityAI::AI_addBestCitizen(bool bWorkers, bool bSpecialists, int* piBestPl
 		// if we do not have a best specialist yet, then just find the one with the best value
 		if (eBestSpecialist == NO_SPECIALIST)
 		{
+			MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_addBestCitizen::specialist_scan");
 			for (int iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 			{
 				if (isSpecialistValid((SpecialistTypes)iI, 1))
@@ -10270,6 +10517,11 @@ bool CvCityAI::AI_addBestCitizen(bool bWorkers, bool bSpecialists, int* piBestPl
 	int iBestPlot = -1;
 	if (bWorkers)
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_addBestCitizen::plot_scan");
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+		MnaiCityYieldValueContext kMnaiYieldContext;
+		mnaiInitCityYieldValueContext(*this, kMnaiYieldContext);
+#endif
 //>>>>Unofficial Bug Fix: Modified by Denev 2010/04/04
 //		for (int iI = 0; iI < NUM_CITY_PLOTS; iI++)
 		for (int iI = 0; iI < getNumCityPlots(); iI++)
@@ -10285,7 +10537,11 @@ bool CvCityAI::AI_addBestCitizen(bool bWorkers, bool bSpecialists, int* piBestPl
 					{
 						if (canWork(pLoopPlot))
 						{
-							int iValue = AI_plotValue(pLoopPlot, bAvoidGrowth, /*bRemove*/ false, /*bIgnoreFood*/ false, bIgnoreGrowth);
+							int iValue = AI_plotValue(pLoopPlot, bAvoidGrowth, /*bRemove*/ false, /*bIgnoreFood*/ false, bIgnoreGrowth
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+								, false, &kMnaiYieldContext
+#endif
+							);
 
 							if (iValue > iBestPlotValue)
 							{
@@ -10353,6 +10609,8 @@ bool CvCityAI::AI_removeWorstCitizen(SpecialistTypes eIgnoreSpecialist)
 	// if we are using more specialists than the free ones we get
 	if (extraFreeSpecialists() < 0)
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_removeWorstCitizen::default_specialist_check");
+
 		// does generic 'citizen' specialist exist?
 		if (GC.defines.iDEFAULT_SPECIALIST != NO_SPECIALIST)
 		{
@@ -10380,6 +10638,8 @@ bool CvCityAI::AI_removeWorstCitizen(SpecialistTypes eIgnoreSpecialist)
 	// if we are using more specialists than the free ones we get
 	if (extraFreeSpecialists() < 0)
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_removeWorstCitizen::specialist_scan");
+
 		for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 		{
 			if (eIgnoreSpecialist != iI)
@@ -10400,26 +10660,38 @@ bool CvCityAI::AI_removeWorstCitizen(SpecialistTypes eIgnoreSpecialist)
 	}
 
 	// check all the plots we working
+	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_removeWorstCitizen::worked_plot_scan");
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+		MnaiCityYieldValueContext kMnaiYieldContext;
+		mnaiInitCityYieldValueContext(*this, kMnaiYieldContext);
+#endif
+
 //>>>>Unofficial Bug Fix: Modified by Denev 2010/04/04
 //	for (iI = 0; iI < NUM_CITY_PLOTS; iI++)
-	for (iI = 0; iI < getNumCityPlots(); iI++)
+		for (iI = 0; iI < getNumCityPlots(); iI++)
 //<<<<Unofficial Bug Fix: End Modify
-	{
-		if (iI != CITY_HOME_PLOT)
 		{
-			if (isWorkingPlot(iI))
+			if (iI != CITY_HOME_PLOT)
 			{
-				pLoopPlot = getCityIndexPlot(iI);
-
-				if (pLoopPlot != NULL)
+				if (isWorkingPlot(iI))
 				{
-					iValue = AI_plotValue(pLoopPlot, bAvoidGrowth, /*bRemove*/ true, /*bIgnoreFood*/ false, bIgnoreGrowth);
+					pLoopPlot = getCityIndexPlot(iI);
 
-					if (iValue < iWorstValue)
+					if (pLoopPlot != NULL)
 					{
-						iWorstValue = iValue;
-						eWorstSpecialist = NO_SPECIALIST;
-						iWorstPlot = iI;
+						iValue = AI_plotValue(pLoopPlot, bAvoidGrowth, /*bRemove*/ true, /*bIgnoreFood*/ false, bIgnoreGrowth
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+							, false, &kMnaiYieldContext
+#endif
+						);
+
+						if (iValue < iWorstValue)
+						{
+							iWorstValue = iValue;
+							eWorstSpecialist = NO_SPECIALIST;
+							iWorstPlot = iI;
+						}
 					}
 				}
 			}
@@ -10440,6 +10712,8 @@ bool CvCityAI::AI_removeWorstCitizen(SpecialistTypes eIgnoreSpecialist)
 	// if we still have not removed one, then try again, but do not ignore the one we were told to ignore
 	if (extraFreeSpecialists() < 0)
 	{
+		MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_removeWorstCitizen::fallback_specialist_scan");
+
 		for (iI = 0; iI < GC.getNumSpecialistInfos(); iI++)
 		{
 			if (getSpecialistCount((SpecialistTypes)iI) > 0)
@@ -10486,20 +10760,31 @@ void CvCityAI::AI_juggleCitizens()
 			int iWorstPlot = -1;
 			int iValue;
 
+			{
+				MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_juggleCitizens::worst_plot_scan");
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+				MnaiCityYieldValueContext kMnaiYieldContext;
+				mnaiInitCityYieldValueContext(*this, kMnaiYieldContext);
+#endif
+
 //>>>>Unofficial Bug Fix: Modified by Denev 2010/04/04
 //			for (int iI = 0; iI < NUM_CITY_PLOTS; iI++)
-			for (int iI = 0; iI < getNumCityPlots(); iI++)
+				for (int iI = 0; iI < getNumCityPlots(); iI++)
 //<<<<Unofficial Bug Fix: End Modify
-			{
-				if (iI != CITY_HOME_PLOT)
 				{
-					if (isWorkingPlot(iI))
+					if (iI != CITY_HOME_PLOT)
 					{
-						CvPlot* pLoopPlot = getCityIndexPlot(iI);
-
-						if (pLoopPlot != NULL)
+						if (isWorkingPlot(iI))
 						{
-								iValue = AI_plotValue(pLoopPlot, bAvoidGrowth, /*bRemove*/ true, /*bIgnoreFood*/ false, bIgnoreGrowth, (iPass == 0));
+							CvPlot* pLoopPlot = getCityIndexPlot(iI);
+
+							if (pLoopPlot != NULL)
+							{
+								iValue = AI_plotValue(pLoopPlot, bAvoidGrowth, /*bRemove*/ true, /*bIgnoreFood*/ false, bIgnoreGrowth, (iPass == 0)
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+									, &kMnaiYieldContext
+#endif
+								);
 
 								// use <= so that we pick the last one that is lowest, to avoid infinite loop with AI_addBestCitizen
 								if (iValue <= iLowestValue)
@@ -10511,6 +10796,7 @@ void CvCityAI::AI_juggleCitizens()
 						}
 					}
 				}
+			}
 
 			// if no worst plot, or we looped back around and are trying to remove the first plot we removed, stop
 			if (iWorstPlot == -1 || std::find(aWorstPlots.begin(), aWorstPlots.end(), iWorstPlot) != aWorstPlots.end())
@@ -10524,11 +10810,15 @@ void CvCityAI::AI_juggleCitizens()
 
 				setWorkingPlot(iWorstPlot, false);
 
-				if (AI_addBestCitizen(true, true))
 				{
-					if (isWorkingPlot(iWorstPlot))
+					MNAI_PROFILE_CITY_ASSIGN("CvCityAI::AI_juggleCitizens::add_best_after_remove");
+
+					if (AI_addBestCitizen(true, true))
 					{
-						bCompletedChecks = true;
+						if (isWorkingPlot(iWorstPlot))
+						{
+							bCompletedChecks = true;
+						}
 					}
 				}
 			}
@@ -10679,8 +10969,7 @@ bool CvCityAI::AI_foodAvailable(int iExtra)
 	return true;
 }
 
-
-int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood, bool bIgnoreGrowth, bool bIgnoreStarvation, bool bWorkerOptimization)
+int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood, bool bIgnoreGrowth, bool bIgnoreStarvation, bool bWorkerOptimization, const MnaiCityYieldValueContext* pMnaiYieldContext)
 {
 	const int iBaseProductionValue = 15;
 	const int iBaseCommerceValue = 7;
@@ -10693,57 +10982,100 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 	int iExtraProductionModifier = 0;
 	int iBaseProductionModifier = 100;
 
-	bool bEmphasizeFood = AI_isEmphasizeYield(YIELD_FOOD);
-	bool bFoodIsProduction = isFoodProduction();
-	bool bCanPopRush = GET_PLAYER(getOwnerINLINE()).canPopRush();
+	bool bEmphasizeFood =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+		MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_FOOD, AI_isEmphasizeYield(YIELD_FOOD));
+#else
+		AI_isEmphasizeYield(YIELD_FOOD);
+#endif
+	bool bFoodIsProduction =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+		MNAI_CITY_CONTEXT_VALUE(bFoodIsProduction, isFoodProduction());
+#else
+		isFoodProduction();
+#endif
+	bool bCanPopRush =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+		MNAI_CITY_CONTEXT_VALUE(bCanPopRush, GET_PLAYER(getOwnerINLINE()).canPopRush());
+#else
+		GET_PLAYER(getOwnerINLINE()).canPopRush();
+#endif
 
 	for (int iJ = 0; iJ < NUM_COMMERCE_TYPES; iJ++)
 	{
 		aiCommerceYieldsTimes100[iJ] = 0;
 	}
 
-	for (int iI = 0; iI < NUM_YIELD_TYPES; iI++)
 	{
-		if (piYields[iI] == 0)
+		MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::yield_delta");
+		for (int iI = 0; iI < NUM_YIELD_TYPES; iI++)
 		{
-			aiYields[iI] = 0;
-		}
-		else
-		{
-			// Get yield for city after adding/removing the citizen in question
-			// Bugfix: Unhappy production is now calculated in getBaseYieldRate. We ignore it in plot value calculations in order to avoid overcomplicating the algorithm.
-			//int iOldCityYield = getBaseYieldRate((YieldTypes)iI);
-			int iOldCityYield = getBaseYieldRate((YieldTypes)iI, false);
-			// Bugfix end
-			int iNewCityYield = (bRemove ? (iOldCityYield - piYields[iI]) : (iOldCityYield + piYields[iI]));
-			int iModifier = getBaseYieldRateModifier((YieldTypes)iI);
-			if (iI == YIELD_PRODUCTION)
+			if (piYields[iI] == 0)
 			{
-				iBaseProductionModifier = iModifier;
-				iExtraProductionModifier = getProductionModifier();
-				iModifier += iExtraProductionModifier;
+				aiYields[iI] = 0;
 			}
+			else
+			{
+				// Get yield for city after adding/removing the citizen in question
+				// Bugfix: Unhappy production is now calculated in getBaseYieldRate. We ignore it in plot value calculations in order to avoid overcomplicating the algorithm.
+				//int iOldCityYield = getBaseYieldRate((YieldTypes)iI);
+				int iOldCityYield =
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+					(pMnaiYieldContext != NULL) ? pMnaiYieldContext->aiBaseYieldRate[iI] :
+#endif
+					getBaseYieldRate((YieldTypes)iI, false);
+				// Bugfix end
+				int iNewCityYield = (bRemove ? (iOldCityYield - piYields[iI]) : (iOldCityYield + piYields[iI]));
+				int iModifier =
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+					(pMnaiYieldContext != NULL) ? pMnaiYieldContext->aiBaseYieldRateModifier[iI] :
+#endif
+					getBaseYieldRateModifier((YieldTypes)iI);
+				if (iI == YIELD_PRODUCTION)
+				{
+					iBaseProductionModifier = iModifier;
+					iExtraProductionModifier =
+#ifdef MNAI_OPT_CITY_YIELD_DELTA_CONTEXT
+						(pMnaiYieldContext != NULL) ? pMnaiYieldContext->iProductionModifier :
+#endif
+						getProductionModifier();
+					iModifier += iExtraProductionModifier;
+				}
 
-			iNewCityYield = (iNewCityYield * iModifier) / 100;
-			iOldCityYield = (iOldCityYield * iModifier) / 100;
+				iNewCityYield = (iNewCityYield * iModifier) / 100;
+				iOldCityYield = (iOldCityYield * iModifier) / 100;
 
-			// The yield of the citizen in question is the difference of total yields
-			// to account for rounding of modifiers
-			aiYields[iI] = (bRemove ? (iOldCityYield - iNewCityYield) : (iNewCityYield - iOldCityYield));
+				// The yield of the citizen in question is the difference of total yields
+				// to account for rounding of modifiers
+				aiYields[iI] = (bRemove ? (iOldCityYield - iNewCityYield) : (iNewCityYield - iOldCityYield));
+			}
 		}
 	}
 
-				for (int iJ = 0; iJ < NUM_COMMERCE_TYPES; iJ++)
-				{
-		int iModifier = getTotalCommerceRateModifier((CommerceTypes)iJ);
+	{
+		MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::commerce_delta");
+		for (int iJ = 0; iJ < NUM_COMMERCE_TYPES; iJ++)
+		{
+			int iModifier =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(aiTotalCommerceRateModifier, iJ, getTotalCommerceRateModifier((CommerceTypes)iJ));
+#else
+				getTotalCommerceRateModifier((CommerceTypes)iJ);
+#endif
 
-		int iCommerceTimes100 = aiYields[YIELD_COMMERCE] * GET_PLAYER(getOwnerINLINE()).getCommercePercent((CommerceTypes)iJ);
-				    if (piCommerceYields != NULL)
-				    {
-				    	iCommerceTimes100 += piCommerceYields[iJ] * 100;
-				    }
-					aiCommerceYieldsTimes100[iJ] += (iCommerceTimes100 * iModifier) / 100;
-				}
+			int iCommerceTimes100 = aiYields[YIELD_COMMERCE] *
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(aiCommercePercent, iJ, GET_PLAYER(getOwnerINLINE()).getCommercePercent((CommerceTypes)iJ));
+#else
+				GET_PLAYER(getOwnerINLINE()).getCommercePercent((CommerceTypes)iJ);
+#endif
+			if (piCommerceYields != NULL)
+			{
+				iCommerceTimes100 += piCommerceYields[iJ] * 100;
+			}
+			aiCommerceYieldsTimes100[iJ] += (iCommerceTimes100 * iModifier) / 100;
+		}
+	}
 
 /************************************************************************************************/
 /* UNOFFICIAL_PATCH                       07/09/09                                jdog5000      */
@@ -10783,27 +11115,90 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 
 	if (!bIgnoreFood && aiYields[YIELD_FOOD] != 0)
 	{
+		MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value");
 		// tiny food factor, to ensure that even when we don't want to grow,
 		// we still prefer more food if everything else is equal
-		iValue += (aiYields[YIELD_FOOD] * 1);
+			iValue += (aiYields[YIELD_FOOD] * 1);
 
-		int iFoodPerTurn = (foodDifference(false) - ((bRemove) ? aiYields[YIELD_FOOD] : 0));
-		int iFoodLevel = getFood();
-		int iFoodToGrow = growthThreshold();
-		int iHealthLevel = goodHealth() - badHealth(/*bNoAngry*/ false, 0);
-		int iHappinessLevel = (isNoUnhappiness() ? std::max(3, iHealthLevel + 5) : happyLevel() - unhappyLevel(0));
-		int iPopulation = getPopulation();
+		int iFoodPerTurn;
+		int iFoodLevel;
+		int iFoodToGrow;
+		int iHealthLevel;
+		int iHappinessLevel;
+		int iPopulation;
+		int iExtraPopulationThatCanWork;
+		int iConsumtionPerPop;
+		int iAdjustedFoodDifference;
+		{
+			MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::state");
+			iFoodPerTurn =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iFoodDifference, foodDifference(false))
+#else
+			foodDifference(false)
+#endif
+			- ((bRemove) ? aiYields[YIELD_FOOD] : 0);
+			iFoodLevel =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iFood, getFood());
+#else
+			getFood();
+#endif
+			iFoodToGrow =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iGrowthThreshold, growthThreshold());
+#else
+			growthThreshold();
+#endif
+			iHealthLevel =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iHealthLevel, goodHealth() - badHealth(/*bNoAngry*/ false, 0));
+#else
+			goodHealth() - badHealth(/*bNoAngry*/ false, 0);
+#endif
+			iHappinessLevel =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iHappinessLevel, isNoUnhappiness() ? std::max(3, iHealthLevel + 5) : happyLevel() - unhappyLevel(0));
+#else
+			(isNoUnhappiness() ? std::max(3, iHealthLevel + 5) : happyLevel() - unhappyLevel(0));
+#endif
+			iPopulation =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iPopulation, getPopulation());
+#else
+			getPopulation();
+#endif
 //>>>>Unofficial Bug Fix: Modified by Denev 2010/04/04
 //		int	iExtraPopulationThatCanWork = std::min(iPopulation - range(-iHappinessLevel, 0, iPopulation) + std::min(0, extraFreeSpecialists()) , NUM_CITY_PLOTS) - getWorkingPopulation() + ((bRemove) ? 1 : 0);
-		int	iExtraPopulationThatCanWork = std::min(iPopulation - range(-iHappinessLevel, 0, iPopulation) + std::min(0, extraFreeSpecialists()) , getNumCityPlots()) - getWorkingPopulation() + ((bRemove) ? 1 : 0);
+			iExtraPopulationThatCanWork = std::min(iPopulation - range(-iHappinessLevel, 0, iPopulation) + std::min(0,
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iExtraFreeSpecialists, extraFreeSpecialists())
+#else
+			extraFreeSpecialists()
+#endif
+			) , getNumCityPlots()) -
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iWorkingPopulation, getWorkingPopulation())
+#else
+			getWorkingPopulation()
+#endif
+			+ ((bRemove) ? 1 : 0);
 //<<<<Unofficial Bug Fix: End Modify
-		int iConsumtionPerPop = GC.getFOOD_CONSUMPTION_PER_POPULATION();
+			iConsumtionPerPop = GC.getFOOD_CONSUMPTION_PER_POPULATION();
 
-		int iAdjustedFoodDifference = (getYieldRate(YIELD_FOOD) + std::min(0, iHealthLevel)) - ((iPopulation + std::min(0, iHappinessLevel) - ((bRemove) ? 1 : 0)) * iConsumtionPerPop);
+			iAdjustedFoodDifference = (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(iYieldRateFood, getYieldRate(YIELD_FOOD))
+#else
+			getYieldRate(YIELD_FOOD)
+#endif
+			+ std::min(0, iHealthLevel)) - ((iPopulation + std::min(0, iHappinessLevel) - ((bRemove) ? 1 : 0)) * iConsumtionPerPop);
+		}
 
 		// if we not human, allow us to starve to half full if avoiding growth
 		if (!bIgnoreStarvation)
 		{
+			MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::starvation");
 			int iStarvingAllowance = 0;
 			if (bAvoidGrowth && !isHuman())
 			{
@@ -10822,7 +11217,13 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 				if (std::max(0, iExtraPopulationThatCanWork * aiYields[YIELD_FOOD]) >= -iFoodPerTurn)
 				{
 					// if this is high food, then we want to pick it first, this will allow us to pick some great non-food later
-					int iHighFoodThreshold = std::min(getBestYieldAvailable(YIELD_FOOD), iConsumtionPerPop + 1);
+					int iHighFoodThreshold = std::min(
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+						MNAI_CITY_CONTEXT_VALUE(iBestYieldAvailableFood, getBestYieldAvailable(YIELD_FOOD))
+#else
+						getBestYieldAvailable(YIELD_FOOD)
+#endif
+						, iConsumtionPerPop + 1);
 					if (iFoodPerTurn <= (AI_isEmphasizeGreatPeople() ? 0 : -iHighFoodThreshold) && aiYields[YIELD_FOOD] >= iHighFoodThreshold)
 					{
 						// value all the food that will contribute to not starving
@@ -10846,6 +11247,7 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 		// if food isnt production, then adjust for growth
 		if (bWorkerOptimization || !bFoodIsProduction)
 		{
+			MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::growth");
 			int iPopToGrow = 0;
 			if (!bAvoidGrowth)
 			{
@@ -10855,6 +11257,8 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 				{
 					// also avail: iFoodLevel, iFoodToGrow
 
+					{
+						MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::growth_state_adjustment");
 					// adjust iFoodPerTurn assuming that we work plots all equal to iConsumtionPerPop
 					// that way it is our guesstimate of how much excess food we will have
 					iFoodPerTurn += (iExtraPopulationThatCanWork * iConsumtionPerPop);
@@ -10862,11 +11266,24 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 					// we have less than 10 extra happy, do some checks to see if we can increase it
 					if (iHappinessLevel < 10)
 					{
+						MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::anger_recovery");
 						// if we have anger becase no military, do not count it, on the assumption that it will
 						// be remedied soon, and that we still want to grow
-						if (getMilitaryHappinessUnits() == 0)
+						if (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+							MNAI_CITY_CONTEXT_VALUE(iMilitaryHappinessUnits, getMilitaryHappinessUnits())
+#else
+							getMilitaryHappinessUnits()
+#endif
+							== 0)
 						{
-							if (GET_PLAYER(getOwnerINLINE()).getNumCities() > 2)
+							if (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+								MNAI_CITY_CONTEXT_VALUE(iOwnerNumCities, GET_PLAYER(getOwnerINLINE()).getNumCities())
+#else
+								GET_PLAYER(getOwnerINLINE()).getNumCities()
+#endif
+								> 2)
 							{
 								iHappinessLevel += ((GC.defines.iNO_MILITARY_PERCENT_ANGER * (iPopulation + 1)) / GC.getPERCENT_ANGER_DIVISOR());
 							}
@@ -10882,10 +11299,20 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 							int iApproxTurnsToGrow = (iNewFoodPerTurn > 0) ? ((iFoodToGrow - iFoodLevel) / iNewFoodPerTurn) : MAX_INT;
 
 							// do we have hurry anger?
-							int iHurryAngerTimer = getHurryAngerTimer();
+							int iHurryAngerTimer =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+								MNAI_CITY_CONTEXT_VALUE(iHurryAngerTimer, getHurryAngerTimer());
+#else
+								getHurryAngerTimer();
+#endif
 							if (iHurryAngerTimer > 0)
 							{
-								int iTurnsUntilAngerIsReduced = iHurryAngerTimer % flatHurryAngerLength();
+								int iTurnsUntilAngerIsReduced = iHurryAngerTimer %
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+									MNAI_CITY_CONTEXT_VALUE(iFlatHurryAngerLength, flatHurryAngerLength());
+#else
+									flatHurryAngerLength();
+#endif
 
 								// angry population is bad but if we'll recover by the time we grow...
 								if (iTurnsUntilAngerIsReduced <= iApproxTurnsToGrow)
@@ -10895,10 +11322,20 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 							}
 
 							// do we have conscript anger?
-							int iConscriptAngerTimer = getConscriptAngerTimer();
+							int iConscriptAngerTimer =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+								MNAI_CITY_CONTEXT_VALUE(iConscriptAngerTimer, getConscriptAngerTimer());
+#else
+								getConscriptAngerTimer();
+#endif
 							if (iConscriptAngerTimer > 0)
 							{
-								int iTurnsUntilAngerIsReduced = iConscriptAngerTimer % flatConscriptAngerLength();
+								int iTurnsUntilAngerIsReduced = iConscriptAngerTimer %
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+									MNAI_CITY_CONTEXT_VALUE(iFlatConscriptAngerLength, flatConscriptAngerLength());
+#else
+									flatConscriptAngerLength();
+#endif
 
 								// angry population is bad but if we'll recover by the time we grow...
 								if (iTurnsUntilAngerIsReduced <= iApproxTurnsToGrow)
@@ -10908,10 +11345,20 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 							}
 
 							// do we have defy resolution anger?
-							int iDefyResolutionAngerTimer = getDefyResolutionAngerTimer();
+							int iDefyResolutionAngerTimer =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+								MNAI_CITY_CONTEXT_VALUE(iDefyResolutionAngerTimer, getDefyResolutionAngerTimer());
+#else
+								getDefyResolutionAngerTimer();
+#endif
 							if (iDefyResolutionAngerTimer > 0)
 							{
-								int iTurnsUntilAngerIsReduced = iDefyResolutionAngerTimer % flatDefyResolutionAngerLength();
+								int iTurnsUntilAngerIsReduced = iDefyResolutionAngerTimer %
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+									MNAI_CITY_CONTEXT_VALUE(iFlatDefyResolutionAngerLength, flatDefyResolutionAngerLength());
+#else
+									flatDefyResolutionAngerLength();
+#endif
 
 								// angry population is bad but if we'll recover by the time we grow...
 								if (iTurnsUntilAngerIsReduced <= iApproxTurnsToGrow)
@@ -10921,7 +11368,10 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 							}
 						}
 					}
+					}
 
+					{
+						MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::growth_capacity");
 					if (bEmphasizeFood)
 					{
 						//If we are emphasize food, pay less heed to caps.
@@ -10932,9 +11382,13 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 					bool bBarFull = (iFoodLevel + iFoodPerTurn /*+ aiYields[YIELD_FOOD]*/ > ((90 * iFoodToGrow) / 100));
 
 					int iPopToGrow = std::max(0, iHappinessLevel);
-					int iGoodTiles = AI_countGoodTiles(iHealthLevel > 0, true, 50, true);
-					iGoodTiles += AI_countGoodSpecialists(iHealthLevel > 0);
-					iGoodTiles += bBarFull ? 0 : 1;
+					int iGoodTiles;
+					{
+						MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::good_tiles");
+						iGoodTiles = AI_countGoodTiles(iHealthLevel > 0, true, 50, true);
+						iGoodTiles += AI_countGoodSpecialists(iHealthLevel > 0);
+						iGoodTiles += bBarFull ? 0 : 1;
+					}
 
 					if (!bEmphasizeFood)
 					{
@@ -10947,22 +11401,29 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 					{
 						if (!bBarFull)
 						{
-							if (AI_specialYieldMultiplier(YIELD_PRODUCTION) < 50)
+							if (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+								MNAI_CITY_CONTEXT_ARRAY(aiSpecialYieldMultiplier, YIELD_PRODUCTION, AI_specialYieldMultiplier(YIELD_PRODUCTION))
+#else
+								AI_specialYieldMultiplier(YIELD_PRODUCTION)
+#endif
+								< 50)
 							{
 								bFillingBar = true;
 							}
 						}
 					}
 
-					if (getPopulation() < 3)
-					{
-						iPopToGrow = std::max(iPopToGrow, 3 - getPopulation());
-						iPopToGrow += 2;
-					}
+					if (iPopulation < 3)
+						{
+							iPopToGrow = std::max(iPopToGrow, 3 - iPopulation);
+							iPopToGrow += 2;
+						}
 
-					// if we want to grow
-					if (iPopToGrow > 0 || bFillingBar)
+						// if we want to grow
+						if (iPopToGrow > 0 || bFillingBar)
 					{
+						MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::growth_value");
 
 						// will multiply this by factors
 						iFoodGrowthValue = aiYields[YIELD_FOOD];
@@ -10987,7 +11448,7 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 						//If we already grow somewhat fast, devalue further food
 						//Remember growth acceleration is not dependent on food eaten per
 						//pop, 4f twice as fast as 2f twice as fast as 1f...
-						int iHighGrowthThreshold = 2 + std::max(std::max(0, 5 - getPopulation()), (iPopToGrow + 1) / 2);
+						int iHighGrowthThreshold = 2 + std::max(std::max(0, 5 - iPopulation), (iPopToGrow + 1) / 2);
 						if (bEmphasizeFood)
 						{
 							iHighGrowthThreshold *= 2;
@@ -10999,10 +11460,19 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 							iFoodGrowthValue /= 100;
 						}
 					}
+					}
 				}
 
+				{
+					MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::food_value::growth_overrides");
 				//very high food override
-				if ((isHuman()) && ((iPopToGrow > 0) || bCanPopRush))
+				if ((
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+					MNAI_CITY_CONTEXT_VALUE(bIsHuman, isHuman())
+#else
+					isHuman()
+#endif
+					) && ((iPopToGrow > 0) || bCanPopRush))
 				{
 					//very high food override
 					int iTempValue = std::max(0, 30 * aiYields[YIELD_FOOD] - 15 * iConsumtionPerPop);
@@ -11019,7 +11489,13 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 				if (bCanPopRush && (iHappinessLevel > 0))
 				{
 					iSlaveryValue = 30 * 14 * std::max(0, aiYields[YIELD_FOOD] - ((iHealthLevel < 0) ? 1 : 0));
-					iSlaveryValue /= std::max(10, (growthThreshold() * (100 - getMaxFoodKeptPercent())));
+					iSlaveryValue /= std::max(10, (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+						MNAI_CITY_CONTEXT_VALUE(iGrowthThreshold, growthThreshold()) * (100 - MNAI_CITY_CONTEXT_VALUE(iMaxFoodKeptPercent, getMaxFoodKeptPercent()))
+#else
+						growthThreshold() * (100 - getMaxFoodKeptPercent())
+#endif
+						));
 
 					iSlaveryValue *= 100;
 /*************************************************************************************************/
@@ -11033,7 +11509,13 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 					iSlaveryValue *= iConsumtionPerPop * 2;
 					iSlaveryValue /= iConsumtionPerPop * 2 + std::max(0, iAdjustedFoodDifference);
 /**								----  End Original Code  ----									**/
-					iSlaveryValue /= std::max(1, getHurryCostModifier(true));
+					iSlaveryValue /= std::max(1,
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+						MNAI_CITY_CONTEXT_VALUE(iHurryCostModifier, getHurryCostModifier(true))
+#else
+						getHurryCostModifier(true)
+#endif
+						);
 
 					iSlaveryValue *= iConsumtionPerPop * 2;
 					iSlaveryValue /= std::max(1, iConsumtionPerPop * 2 + std::max(0, iAdjustedFoodDifference));
@@ -11052,10 +11534,13 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 					}
 					iFoodGPPValue += std::max(0, aiYields[YIELD_FOOD] - iAdjust) * std::max(0, (12 + 5 * std::min(0, iHappinessLevel)));
 				}
+				}
 			}
 		}
 	}
 
+
+	MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_yieldValue::final_scoring");
 
 	int iProductionValue = 0;
 	int iCommerceValue = 0;
@@ -11080,11 +11565,35 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 	// Particularly helps coastal cities with plains forests
 	if( aiYields[YIELD_PRODUCTION] > 0 )
 	{
-		if( !bFoodIsProduction && isProduction() )
+		if( !bFoodIsProduction &&
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_VALUE(bIsProduction, isProduction())
+#else
+			isProduction()
+#endif
+			)
 		{
-			if( foodDifference(false) >= GC.getFOOD_CONSUMPTION_PER_POPULATION() )
+			if(
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_VALUE(iFoodDifference, foodDifference(false))
+#else
+				foodDifference(false)
+#endif
+				>= GC.getFOOD_CONSUMPTION_PER_POPULATION() )
 			{
-				if( getYieldRate(YIELD_PRODUCTION) < (1 + getPopulation()/3) )
+				if(
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+					MNAI_CITY_CONTEXT_VALUE(iYieldRateProduction, getYieldRate(YIELD_PRODUCTION))
+#else
+					getYieldRate(YIELD_PRODUCTION)
+#endif
+					< (1 +
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+					MNAI_CITY_CONTEXT_VALUE(iPopulation, getPopulation())
+#else
+					getPopulation()
+#endif
+					/3) )
 				{
 					iValue += 128 + 8 * aiYields[YIELD_PRODUCTION];
 				}
@@ -11099,8 +11608,19 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 	{
 		if (aiCommerceYieldsTimes100[iI] != 0)
 		{
-			int iCommerceWeight = GET_PLAYER(getOwnerINLINE()).AI_commerceWeight((CommerceTypes)iI);
-			if (AI_isEmphasizeCommerce((CommerceTypes)iI))
+			int iCommerceWeight =
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(aiCommerceWeight, iI, GET_PLAYER(getOwnerINLINE()).AI_commerceWeight((CommerceTypes)iI));
+#else
+				GET_PLAYER(getOwnerINLINE()).AI_commerceWeight((CommerceTypes)iI);
+#endif
+			if (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(abEmphasizeCommerce, iI, AI_isEmphasizeCommerce((CommerceTypes)iI))
+#else
+				AI_isEmphasizeCommerce((CommerceTypes)iI)
+#endif
+				)
 			{
 				iCommerceWeight *= 200;
 				iCommerceWeight /= 100;
@@ -11112,7 +11632,13 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 					iCommerceValue += (15 * aiCommerceYieldsTimes100[iI]) / 100;
 				}
 			}
-			iCommerceValue += (iCommerceWeight * (aiCommerceYieldsTimes100[iI] * iBaseCommerceValue) * GET_PLAYER(getOwnerINLINE()).AI_averageCommerceExchange((CommerceTypes)iI)) / 1000000;
+			iCommerceValue += (iCommerceWeight * (aiCommerceYieldsTimes100[iI] * iBaseCommerceValue) *
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(aiAverageCommerceExchange, iI, GET_PLAYER(getOwnerINLINE()).AI_averageCommerceExchange((CommerceTypes)iI))
+#else
+				GET_PLAYER(getOwnerINLINE()).AI_averageCommerceExchange((CommerceTypes)iI)
+#endif
+				) / 1000000;
 		}
 	}
 /*
@@ -11178,10 +11704,16 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 /************************************************************************************************/
 	// Rounding can be a problem, particularly for small commerce amounts.  Added safe guards to make
 	// sure commerce is counted, even if just a tiny amount.
-	if (AI_isEmphasizeYield(YIELD_PRODUCTION))
+	if (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+		MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_PRODUCTION, AI_isEmphasizeYield(YIELD_PRODUCTION))
+#else
+		AI_isEmphasizeYield(YIELD_PRODUCTION)
+#endif
+		)
 	{
 		iProductionValue *= 130;
-		iProductionValue /= 100;
+				iProductionValue /= 100;
 		
 		if (isFoodProduction())
 		{
@@ -11189,22 +11721,40 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 			iFoodValue /= 100;
 		}
 		
-		if (!AI_isEmphasizeYield(YIELD_COMMERCE) && iCommerceValue > 0)
+		if (!
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_COMMERCE, AI_isEmphasizeYield(YIELD_COMMERCE))
+#else
+			AI_isEmphasizeYield(YIELD_COMMERCE)
+#endif
+			&& iCommerceValue > 0)
 		{
 			iCommerceValue *= 60;
 			iCommerceValue /= 100;
 			iCommerceValue = std::max(1, iCommerceValue);
 		}
-		if (!AI_isEmphasizeYield(YIELD_FOOD) && iFoodValue > 0)
+		if (!
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_FOOD, AI_isEmphasizeYield(YIELD_FOOD))
+#else
+			AI_isEmphasizeYield(YIELD_FOOD)
+#endif
+			&& iFoodValue > 0)
 		{
 			iFoodValue *= 75;
 			iFoodValue /= 100;
 			iFoodValue = std::max(1, iFoodValue);
 		}
 	}
-	if (AI_isEmphasizeYield(YIELD_FOOD))
+	if (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+		MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_FOOD, AI_isEmphasizeYield(YIELD_FOOD))
+#else
+		AI_isEmphasizeYield(YIELD_FOOD)
+#endif
+		)
 	{
-		if (!isFoodProduction())
+			if (!isFoodProduction())
 		{
 			iFoodValue *= 130;
 			iFoodValue /= 100;
@@ -11212,44 +11762,85 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 			iSlaveryValue /= 100;
 		}
 	}
-	if (AI_isEmphasizeYield(YIELD_COMMERCE))
+	if (
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+		MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_COMMERCE, AI_isEmphasizeYield(YIELD_COMMERCE))
+#else
+		AI_isEmphasizeYield(YIELD_COMMERCE)
+#endif
+		)
 	{
 		iCommerceValue *= 130;
 		iCommerceValue /= 100;
-		if (!AI_isEmphasizeYield(YIELD_PRODUCTION) && iProductionValue > 0)
+		if (!
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_PRODUCTION, AI_isEmphasizeYield(YIELD_PRODUCTION))
+#else
+			AI_isEmphasizeYield(YIELD_PRODUCTION)
+#endif
+			&& iProductionValue > 0)
 		{
 			iProductionValue *= 75;
 			iProductionValue /= 100;
 			iProductionValue = std::max(1,iProductionValue);
 		}
-		if (!AI_isEmphasizeYield(YIELD_FOOD) && iFoodValue > 0)
+		if (!
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_FOOD, AI_isEmphasizeYield(YIELD_FOOD))
+#else
+			AI_isEmphasizeYield(YIELD_FOOD)
+#endif
+			&& iFoodValue > 0)
 		{
 			//Don't supress twice.
-			if (!AI_isEmphasizeYield(YIELD_PRODUCTION))
+			if (!
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(abEmphasizeYield, YIELD_PRODUCTION, AI_isEmphasizeYield(YIELD_PRODUCTION))
+#else
+				AI_isEmphasizeYield(YIELD_PRODUCTION)
+#endif
+				)
 			{
 				iFoodValue *= 80;
 				iFoodValue /= 100;
 				iFoodValue = std::max(1, iFoodValue);
 			}
 		}
-	}
-		
+		}
+
 	if( iProductionValue > 0 )
 	{
 		if (isFoodProduction())
 		{
-			iProductionValue *= 100 + (bWorkerOptimization ? 0 : AI_specialYieldMultiplier(YIELD_PRODUCTION));
-			iProductionValue /= 100;		
+			iProductionValue *= 100 + (bWorkerOptimization ? 0 :
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(aiSpecialYieldMultiplier, YIELD_PRODUCTION, AI_specialYieldMultiplier(YIELD_PRODUCTION))
+#else
+				AI_specialYieldMultiplier(YIELD_PRODUCTION)
+#endif
+				);
+			iProductionValue /= 100;
 		}
 		else
 		{
 			iProductionValue *= iBaseProductionModifier;
 			iProductionValue /= (iBaseProductionModifier + iExtraProductionModifier);
-			
+
 			iProductionValue += iSlaveryValue;
-			iProductionValue *= (100 + (bWorkerOptimization ? 0 : AI_specialYieldMultiplier(YIELD_PRODUCTION)));
-			
-			iProductionValue /= GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_PRODUCTION);
+			iProductionValue *= (100 + (bWorkerOptimization ? 0 :
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(aiSpecialYieldMultiplier, YIELD_PRODUCTION, AI_specialYieldMultiplier(YIELD_PRODUCTION))
+#else
+				AI_specialYieldMultiplier(YIELD_PRODUCTION)
+#endif
+					));
+
+			iProductionValue /=
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+				MNAI_CITY_CONTEXT_ARRAY(aiAverageYieldMultiplier, YIELD_PRODUCTION, GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_PRODUCTION));
+#else
+				GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_PRODUCTION);
+#endif
 		}
 	
 		iValue += std::max(1,iProductionValue);
@@ -11257,15 +11848,31 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 	
 	if( iCommerceValue > 0 )
 	{
-		iCommerceValue *= (100 + (bWorkerOptimization ? 0 : AI_specialYieldMultiplier(YIELD_COMMERCE)));
-		iCommerceValue /= GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_COMMERCE);
+		iCommerceValue *= (100 + (bWorkerOptimization ? 0 :
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_ARRAY(aiSpecialYieldMultiplier, YIELD_COMMERCE, AI_specialYieldMultiplier(YIELD_COMMERCE))
+#else
+			AI_specialYieldMultiplier(YIELD_COMMERCE)
+#endif
+			));
+		iCommerceValue /=
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_ARRAY(aiAverageYieldMultiplier, YIELD_COMMERCE, GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_COMMERCE));
+#else
+			GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_COMMERCE);
+#endif
 		iValue += std::max(1, iCommerceValue);
 	}
 //	
 	if( iFoodValue > 0 )
 	{
 		iFoodValue *= 100;
-		iFoodValue /= GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_FOOD);
+		iFoodValue /=
+#if defined(MNAI_OPT_CITY_YIELD_DELTA_CONTEXT) && defined(MNAI_OPT_CITY_YIELD_STATIC_CONTEXT)
+			MNAI_CITY_CONTEXT_ARRAY(aiAverageYieldMultiplier, YIELD_FOOD, GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_FOOD));
+#else
+			GET_PLAYER(getOwnerINLINE()).AI_averageYieldMultiplier(YIELD_FOOD);
+#endif
 		iValue += std::max(1, iFoodValue);
 	}
 /************************************************************************************************/
@@ -11275,10 +11882,11 @@ int CvCityAI::AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoi
 	return iValue;
 }
 
-
-int CvCityAI::AI_plotValue(CvPlot* pPlot, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood, bool bIgnoreGrowth, bool bIgnoreStarvation)
+int CvCityAI::AI_plotValue(CvPlot* pPlot, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood, bool bIgnoreGrowth, bool bIgnoreStarvation, const MnaiCityYieldValueContext* pMnaiYieldContext)
 {
 	PROFILE_FUNC();
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_CITY_PLOT_VALUE);
+	MNAI_PATH_REQUEST_CONTEXT("CvCityAI::AI_plotValue");
 
 	short aiYields[NUM_YIELD_TYPES];
 	ImprovementTypes eCurrentImprovement;
@@ -11304,8 +11912,11 @@ int CvCityAI::AI_plotValue(CvPlot* pPlot, bool bAvoidGrowth, bool bRemove, bool 
 		eFinalImprovement = finalImprovementUpgrade(eCurrentImprovement, 0, getOwner());
 	}
 
-
-	int iYieldValue = (AI_yieldValue(aiYields, NULL, bAvoidGrowth, bRemove, bIgnoreFood, bIgnoreGrowth, bIgnoreStarvation) * 100);
+	int iYieldValue;
+	{
+		MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_plotValue::current_yield_value");
+		iYieldValue = (AI_yieldValue(aiYields, NULL, bAvoidGrowth, bRemove, bIgnoreFood, bIgnoreGrowth, bIgnoreStarvation, false, pMnaiYieldContext) * 100);
+	}
 
 	if (eFinalImprovement != NO_IMPROVEMENT)
 	{
@@ -11314,7 +11925,11 @@ int CvCityAI::AI_plotValue(CvPlot* pPlot, bool bAvoidGrowth, bool bRemove, bool 
 			iYieldDiff = (pPlot->calculateImprovementYieldChange(eFinalImprovement, ((YieldTypes)iI), getOwnerINLINE()) - pPlot->calculateImprovementYieldChange(eCurrentImprovement, ((YieldTypes)iI), getOwnerINLINE()));
 			aiYields[iI] += iYieldDiff;
 		}
-		int iFinalYieldValue = (AI_yieldValue(aiYields, NULL, bAvoidGrowth, bRemove, bIgnoreFood, bIgnoreGrowth, bIgnoreStarvation) * 100);
+		int iFinalYieldValue;
+		{
+			MNAI_PROFILE_CITY_YIELD("CvCityAI::AI_plotValue::final_improvement_yield_value");
+			iFinalYieldValue = (AI_yieldValue(aiYields, NULL, bAvoidGrowth, bRemove, bIgnoreFood, bIgnoreGrowth, bIgnoreStarvation, false, pMnaiYieldContext) * 100);
+		}
 
 		if (iFinalYieldValue > iYieldValue)
 		{
@@ -11422,6 +12037,7 @@ int CvCityAI::AI_buildUnitProb()
 void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peBestBuild, int iFoodPriority, int iProductionPriority, int iCommercePriority, bool bChop, int iHappyAdjust, int iHealthAdjust, int iDesiredFoodChange)
 {
 	PROFILE_FUNC();
+	MNAI_PATH_REQUEST_CONTEXT("CvCityAI::AI_bestPlotBuild");
 
 	const CvPlayerAI& kOwner = GET_PLAYER(getOwnerINLINE()); // K-Mod
 
@@ -11481,6 +12097,7 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 
 	if (pPlot->getFeatureType() != NO_FEATURE)
 	{
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::feature_setup");
 		iClearFeatureValue = AI_clearFeatureValue(getCityPlotIndex(pPlot));
 
 		const CvFeatureInfo& kFeatureInfo = GC.getFeatureInfo(pPlot->getFeatureType());
@@ -11492,6 +12109,7 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 
 	if (!bHasBonusImprovement)
 	{
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::irrigation_emphasis");
 		bEmphasizeIrrigation = false;
 
 		CvPlot* pAdjacentPlot;
@@ -11581,15 +12199,18 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 		}
 	}
 
-	for (int iI = 0; iI < GC.getNumImprovementInfos(); iI++)
 	{
-		ImprovementTypes eImprovement = ((ImprovementTypes)iI);
-		BuildTypes eBestTempBuild;
-		int iValue = AI_getImprovementValue(pPlot, eImprovement, iFoodPriority, iProductionPriority, iCommercePriority, iDesiredFoodChange, iClearFeatureValue, bEmphasizeIrrigation, &eBestTempBuild);
-		if (iValue > iBestValue)
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::improvement_value_loop");
+		for (int iI = 0; iI < GC.getNumImprovementInfos(); iI++)
 		{
-			iBestValue = iValue;
-			eBestBuild = eBestTempBuild;
+			ImprovementTypes eImprovement = ((ImprovementTypes)iI);
+			BuildTypes eBestTempBuild;
+			int iValue = AI_getImprovementValue(pPlot, eImprovement, iFoodPriority, iProductionPriority, iCommercePriority, iDesiredFoodChange, iClearFeatureValue, bEmphasizeIrrigation, &eBestTempBuild);
+			if (iValue > iBestValue)
+			{
+				iBestValue = iValue;
+				eBestBuild = eBestTempBuild;
+			}
 		}
 	}
 
@@ -11603,6 +12224,7 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 	else if (iClearValue_wYield > 0)
 	// K-Mod end
 	{
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::feature_clear_loop");
 		FAssert(pPlot->getFeatureType() != NO_FEATURE);
 
 		{
@@ -11624,7 +12246,12 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 
 						)
 						{
-							if (kOwner.canBuild(pPlot, eBuild))
+							bool bCanBuildFeatureClear;
+							{
+								MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::feature_clear_can_build");
+								bCanBuildFeatureClear = kOwner.canBuild(pPlot, eBuild);
+							}
+							if (bCanBuildFeatureClear)
 							{
 								int iValue = iClearValue_wYield;
 								CvCity* pCity;
@@ -11652,6 +12279,7 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 	if (bChop && (eBonus == NO_BONUS) && (pPlot->getFeatureType() != NO_FEATURE) &&
 		(pPlot->getImprovementType() == NO_IMPROVEMENT) && !(kOwner.isOption(PLAYEROPTION_LEAVE_FORESTS)))
 	{
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::chop_loop");
 		for (int iI = 0; iI < GC.getNumBuildInfos(); iI++)
 		{
 			BuildTypes eBuild = ((BuildTypes)iI);
@@ -11665,7 +12293,12 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 
                 )
                 {
-					if (kOwner.canBuild(pPlot, eBuild))
+					bool bCanBuildChop;
+					{
+						MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::chop_can_build");
+						bCanBuildChop = kOwner.canBuild(pPlot, eBuild);
+					}
+					if (bCanBuildChop)
 					{
 						CvCity* pCity;
 						int iValue = (pPlot->getFeatureProduction(eBuild, getTeam(), &pCity)) * 10;
@@ -11725,52 +12358,60 @@ void CvCityAI::AI_bestPlotBuild(CvPlot* pPlot, int* piBestValue, BuildTypes* peB
 	}
 
 
-	for (int iI = 0; iI < GC.getNumRouteInfos(); iI++)
 	{
-		RouteTypes eRoute = (RouteTypes)iI;
-		RouteTypes eOldRoute = pPlot->getRouteType();
-
-		if (eRoute != eOldRoute)
+		MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::route_loop");
+		for (int iI = 0; iI < GC.getNumRouteInfos(); iI++)
 		{
-			int iTempValue = 0;
-			if (pPlot->getImprovementType() != NO_IMPROVEMENT)
-			{
-				if ((eOldRoute == NO_ROUTE) || (GC.getRouteInfo(eRoute).getValue() > GC.getRouteInfo(eOldRoute).getValue()))
-				{
-					iTempValue += ((GC.getImprovementInfo(pPlot->getImprovementType()).getRouteYieldChanges(eRoute, YIELD_FOOD)) * 100);
-					iTempValue += ((GC.getImprovementInfo(pPlot->getImprovementType()).getRouteYieldChanges(eRoute, YIELD_PRODUCTION)) * 80); // was 60
-					iTempValue += ((GC.getImprovementInfo(pPlot->getImprovementType()).getRouteYieldChanges(eRoute, YIELD_COMMERCE)) * 40);
-				}
+			RouteTypes eRoute = (RouteTypes)iI;
+			RouteTypes eOldRoute = pPlot->getRouteType();
 
-				if (pPlot->isBeingWorked())
-				{
-					iTempValue *= 2;
-				}
-				//road up bonuses if sort of bored.
-				//if ((eOldRoute == NO_ROUTE) && (eBonus != NO_BONUS))
-				if (!pPlot->isWater() && eOldRoute == NO_ROUTE && eBonus != NO_BONUS) // K-Mod
-				{
-					iTempValue += (pPlot->isConnectedToCapital() ? 10 : 30);
-				}
-			}
-
-			if (iTempValue > 0)
+			if (eRoute != eOldRoute)
 			{
-				for (int iJ = 0; iJ < GC.getNumBuildInfos(); iJ++)
+				int iTempValue = 0;
+				if (pPlot->getImprovementType() != NO_IMPROVEMENT)
 				{
-					BuildTypes eBuild = ((BuildTypes)iJ);
-					if (GC.getBuildInfo(eBuild).getRoute() == eRoute)
+					if ((eOldRoute == NO_ROUTE) || (GC.getRouteInfo(eRoute).getValue() > GC.getRouteInfo(eOldRoute).getValue()))
 					{
-						if (kOwner.canBuild(pPlot, eBuild, false))
-						{
-							//the value multiplier is based on the default time...
-							int iValue = iTempValue * 5 * 300;
-							iValue /= GC.getBuildInfo(eBuild).getTime();
+						iTempValue += ((GC.getImprovementInfo(pPlot->getImprovementType()).getRouteYieldChanges(eRoute, YIELD_FOOD)) * 100);
+						iTempValue += ((GC.getImprovementInfo(pPlot->getImprovementType()).getRouteYieldChanges(eRoute, YIELD_PRODUCTION)) * 80); // was 60
+						iTempValue += ((GC.getImprovementInfo(pPlot->getImprovementType()).getRouteYieldChanges(eRoute, YIELD_COMMERCE)) * 40);
+					}
 
-							if ((iValue > iBestValue) || ((iValue > 0) && (eBestBuild == NO_BUILD)))
+					if (pPlot->isBeingWorked())
+					{
+						iTempValue *= 2;
+					}
+					//road up bonuses if sort of bored.
+					//if ((eOldRoute == NO_ROUTE) && (eBonus != NO_BONUS))
+					if (!pPlot->isWater() && eOldRoute == NO_ROUTE && eBonus != NO_BONUS) // K-Mod
+					{
+						iTempValue += (pPlot->isConnectedToCapital() ? 10 : 30);
+					}
+				}
+
+				if (iTempValue > 0)
+				{
+					for (int iJ = 0; iJ < GC.getNumBuildInfos(); iJ++)
+					{
+						BuildTypes eBuild = ((BuildTypes)iJ);
+						if (GC.getBuildInfo(eBuild).getRoute() == eRoute)
+						{
+							bool bCanBuildRoute;
 							{
-								iBestValue = iValue;
-								eBestBuild = eBuild;
+								MNAI_PROFILE_BEST_PLOT_BUILD("CvCityAI::AI_bestPlotBuild::route_can_build");
+								bCanBuildRoute = kOwner.canBuild(pPlot, eBuild, false);
+							}
+							if (bCanBuildRoute)
+							{
+								//the value multiplier is based on the default time...
+								int iValue = iTempValue * 5 * 300;
+								iValue /= GC.getBuildInfo(eBuild).getTime();
+
+								if ((iValue > iBestValue) || ((iValue > 0) && (eBestBuild == NO_BUILD)))
+								{
+									iBestValue = iValue;
+									eBestBuild = eBuild;
+								}
 							}
 						}
 					}
@@ -12764,6 +13405,7 @@ int CvCityAI::AI_countNumBonuses(BonusTypes eBonus, bool bIncludeOurs, bool bInc
 /************************************************************************************************/
 int CvCityAI::AI_countNumImprovableBonuses( bool bIncludeNeutral, TechTypes eExtraTech, bool bLand, bool bWater )
 {
+	MNAI_PATH_REQUEST_CONTEXT("CvCityAI::AI_countNumImprovableBonuses");
 	CvPlot* pLoopPlot;
     BonusTypes eLoopBonus;
     int iI;

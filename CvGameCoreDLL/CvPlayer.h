@@ -1250,7 +1250,7 @@ public:
 	bool canDefyResolution(VoteSourceTypes eVoteSource, const VoteSelectionSubData& kData) const;
 	void setDefiedResolution(VoteSourceTypes eVoteSource, const VoteSelectionSubData& kData);
 	void setEndorsedResolution(VoteSourceTypes eVoteSource, const VoteSelectionSubData& kData);
-	bool isFullMember(VoteSourceTypes eVoteSource) const;    // Exposed to Python
+	bool isFullMember(VoteSourceTypes eVoteSource, const char* pszCaller = NULL) const;    // Exposed to Python
 	bool isVotingMember(VoteSourceTypes eVoteSource) const;    // Exposed to Python
 #if 0 // !defined(USE_OLD_CODE)
 	bool isVotingMember(const CvVoteSourceInfo &kVoteSourceInfo, VoteSourceTypes eVoteSource) const;

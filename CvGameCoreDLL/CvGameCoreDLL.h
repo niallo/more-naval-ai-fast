@@ -153,6 +153,81 @@ __forceinline float MaxFloat() { return DWtoF(0x7f7fffff); }
 
 void startProfilingDLL();
 void stopProfilingDLL();
+#ifdef MNAI_RELEASE_TRACE
+enum MnaiReleaseTracePhase
+{
+	MNAI_TRACE_GAME_UPDATE = 0,
+	MNAI_TRACE_CALLBACK_GAP,
+	MNAI_TRACE_UPDATE_SLICE,
+	MNAI_TRACE_UPDATE_MOVES,
+	MNAI_TRACE_SET_TURN_ACTIVE,
+	MNAI_TRACE_GAME_DO_TURN,
+	MNAI_TRACE_PLAYER_DO_TURN,
+	MNAI_TRACE_PLAYER_DO_TURN_UNITS,
+	MNAI_TRACE_CITY_DO_TURN,
+	MNAI_TRACE_CITY_AI_DO_TURN,
+	MNAI_TRACE_CITY_ASSIGN,
+	MNAI_TRACE_CITY_BEST_BUILD,
+	MNAI_TRACE_CITY_PLOT_VALUE,
+	MNAI_TRACE_PLAYER_UNIT_UPDATE,
+	MNAI_TRACE_GROUP_AI_UPDATE,
+	MNAI_TRACE_UNIT_AI_UPDATE,
+	MNAI_TRACE_UNIT_DISPATCH,
+	MNAI_TRACE_GENERATE_PATH,
+	MNAI_TRACE_DANGER,
+	MNAI_TRACE_PHASE_COUNT
+};
+
+class MnaiReleaseTraceScope
+{
+public:
+	MnaiReleaseTraceScope(MnaiReleaseTracePhase ePhase);
+	~MnaiReleaseTraceScope();
+	void finish(__int64 iNowTicks);
+	MnaiReleaseTraceScope* getParent() const;
+
+private:
+	MnaiReleaseTracePhase m_ePhase;
+	__int64 m_iStartTicks;
+	__int64 m_iChildTicks;
+	MnaiReleaseTraceScope* m_pParent;
+	bool m_bActive;
+};
+
+void mnaiReleaseTraceSampleScheduler();
+
+#define MNAI_RELEASE_TRACE_JOIN_INNER(a, b) a##b
+#define MNAI_RELEASE_TRACE_JOIN(a, b) MNAI_RELEASE_TRACE_JOIN_INNER(a, b)
+#define MNAI_RELEASE_TRACE_SCOPE(phase) MnaiReleaseTraceScope MNAI_RELEASE_TRACE_JOIN(mnaiReleaseTraceScope_, __LINE__)(phase)
+#define MNAI_RELEASE_TRACE_SCHEDULER_SAMPLE() mnaiReleaseTraceSampleScheduler()
+#else
+#define MNAI_RELEASE_TRACE_SCOPE(phase)
+#define MNAI_RELEASE_TRACE_SCHEDULER_SAMPLE()
+#endif
+#ifdef MNAI_PROFILE_FULL_MEMBER_CALLERS
+void mnaiResetFullMemberCallerStats();
+void mnaiLogFullMemberCallerStats();
+#endif
+#ifdef MNAI_PROFILE_PATH_REQUESTS
+class CvSelectionGroup;
+class CvPlot;
+class MnaiPathRequestContextScope
+{
+public:
+	MnaiPathRequestContextScope(const char* pszContext);
+	~MnaiPathRequestContextScope();
+
+private:
+	const char* m_pszPreviousContext;
+};
+#define MNAI_PATH_REQUEST_CONTEXT(name) MnaiPathRequestContextScope mnaiPathRequestContextScope(name)
+void mnaiResetPathRequestStats();
+void mnaiLogPathRequestStats();
+const char* mnaiGetPathRequestContext();
+void mnaiRecordPathRequest(const char* pszContext, const CvSelectionGroup* pGroup, const CvPlot* pFromPlot, const CvPlot* pToPlot, int iFlags, bool bReuse, bool bSuccess, int iPathTurns, __int64 iElapsedTicks);
+#else
+#define MNAI_PATH_REQUEST_CONTEXT(name)
+#endif
 
 //
 // Boost Python

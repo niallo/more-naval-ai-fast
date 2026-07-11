@@ -54,6 +54,122 @@
 #include "CvBugOptions.h"
 // BUG - Ignore Harmless Barbarians - end
 
+#ifdef MNAI_PROFILE_PLAYER_TURN_DETAIL
+#define MNAI_PROFILE_PLAYER_TURN(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_PLAYER_TURN(name)
+#endif
+
+#ifdef MNAI_PROFILE_CANBUILD_ORDER_DETAIL
+#define MNAI_PROFILE_CANBUILD_ORDER(name) PROFILE(name)
+
+namespace
+{
+	int g_iMnaiCanBuildLedgerTurn = -1;
+	std::set<unsigned __int64> g_mnaiCanBuildRequestKeys;
+
+	bool mnaiCanBuildRequestRepeated(const CvPlayer& kPlayer, const CvPlot* pPlot, BuildTypes eBuild, bool bTestEra, bool bTestVisible)
+	{
+		const int iTurn = GC.getGameINLINE().getGameTurn();
+		if (g_iMnaiCanBuildLedgerTurn != iTurn)
+		{
+			g_iMnaiCanBuildLedgerTurn = iTurn;
+			g_mnaiCanBuildRequestKeys.clear();
+		}
+
+		const int iPlotIndex = GC.getMapINLINE().plotNumINLINE(pPlot->getX_INLINE(), pPlot->getY_INLINE());
+		unsigned __int64 iKey = (unsigned __int64)(kPlayer.getID() & 0xff);
+		iKey = (iKey << 20) | (unsigned __int64)(iPlotIndex & 0xfffff);
+		iKey = (iKey << 12) | (unsigned __int64)((int)eBuild & 0xfff);
+		iKey = (iKey << 1) | (bTestEra ? 1 : 0);
+		iKey = (iKey << 1) | (bTestVisible ? 1 : 0);
+		return !g_mnaiCanBuildRequestKeys.insert(iKey).second;
+	}
+}
+#else
+#define MNAI_PROFILE_CANBUILD_ORDER(name)
+#endif
+
+#ifdef MNAI_PROFILE_FULL_MEMBER_CALLERS
+namespace
+{
+	struct MnaiFullMemberCallerStat
+	{
+		const char* m_szName;
+		unsigned int m_iCalls;
+	};
+
+	const int MNAI_FULL_MEMBER_MAX_CALLERS = 128;
+	MnaiFullMemberCallerStat g_mnaiFullMemberCallerStats[MNAI_FULL_MEMBER_MAX_CALLERS];
+	int g_iMnaiFullMemberCallerCount = 0;
+	bool g_bMnaiFullMemberCallerHeaderWritten = false;
+
+	void mnaiCountFullMemberCaller(const char* pszCaller)
+	{
+		const char* pszName = (pszCaller != NULL) ? pszCaller : "unknown";
+		for (int iI = 0; iI < g_iMnaiFullMemberCallerCount; iI++)
+		{
+			if (g_mnaiFullMemberCallerStats[iI].m_szName == pszName)
+			{
+				g_mnaiFullMemberCallerStats[iI].m_iCalls++;
+				return;
+			}
+		}
+
+		if (g_iMnaiFullMemberCallerCount < MNAI_FULL_MEMBER_MAX_CALLERS)
+		{
+			g_mnaiFullMemberCallerStats[g_iMnaiFullMemberCallerCount].m_szName = pszName;
+			g_mnaiFullMemberCallerStats[g_iMnaiFullMemberCallerCount].m_iCalls = 1;
+			g_iMnaiFullMemberCallerCount++;
+		}
+	}
+}
+
+void mnaiResetFullMemberCallerStats()
+{
+	g_iMnaiFullMemberCallerCount = 0;
+}
+
+void mnaiLogFullMemberCallerStats()
+{
+	if (!g_bMnaiFullMemberCallerHeaderWritten)
+	{
+		gDLL->logMsg("full_member_callers.csv", "turn,caller,calls", false, false);
+		g_bMnaiFullMemberCallerHeaderWritten = true;
+	}
+
+	std::vector<MnaiFullMemberCallerStat> aStats;
+	for (int iI = 0; iI < g_iMnaiFullMemberCallerCount; iI++)
+	{
+		aStats.push_back(g_mnaiFullMemberCallerStats[iI]);
+	}
+
+	for (size_t iI = 1; iI < aStats.size(); iI++)
+	{
+		for (size_t iJ = iI; iJ > 0; iJ--)
+		{
+			if (aStats[iJ - 1].m_iCalls < aStats[iJ].m_iCalls)
+			{
+				MnaiFullMemberCallerStat kTemp = aStats[iJ - 1];
+				aStats[iJ - 1] = aStats[iJ];
+				aStats[iJ] = kTemp;
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+
+	CvString buffer;
+	int iTurn = GC.getGameINLINE().getGameTurn();
+	for (size_t iI = 0; iI < aStats.size(); iI++)
+	{
+		buffer.Format("%d,%s,%u", iTurn, aStats[iI].m_szName, aStats[iI].m_iCalls);
+		gDLL->logMsg("full_member_callers.csv", buffer.c_str(), false, false);
+	}
+}
+#endif
 
 // Public Functions...
 
@@ -4381,6 +4497,7 @@ const TCHAR* CvPlayer::getUnitButton(UnitTypes eUnit) const
 void CvPlayer::doTurn()
 {
 	PROFILE_FUNC();
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_PLAYER_DO_TURN);
 
 	CvCity* pLoopCity;
 	int iLoop;
@@ -4388,13 +4505,20 @@ void CvPlayer::doTurn()
 	FAssertMsg(isAlive(), "isAlive is expected to be true");
 	FAssertMsg(!hasBusyUnit() || GC.getGameINLINE().isMPOption(MPOPTION_SIMULTANEOUS_TURNS)  || GC.getGameINLINE().isSimultaneousTeamTurns(), "End of turn with busy units in a sequential-turn game");
 
-	CvEventReporter::getInstance().beginPlayerTurn( GC.getGameINLINE().getGameTurn(),  getID());
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::begin_player_turn");
+		CvEventReporter::getInstance().beginPlayerTurn( GC.getGameINLINE().getGameTurn(),  getID());
+	}
 
-	doUpdateCacheOnTurn();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::update_cache_on_turn");
+		doUpdateCacheOnTurn();
+	}
 
 	// Sephi AI (new Player::DoTurn Functions)
     if (!isHuman())
     {
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::tower_mastery");
         AI_doTowerMastery();
     }
 	// End Sephi AI
@@ -4441,8 +4565,14 @@ void CvPlayer::doTurn()
 	}
 	// MNAI - End Puppet States
 
-	GC.getGameINLINE().verifyDeals();
-	AI_doTurnPre();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::verify_deals");
+		GC.getGameINLINE().verifyDeals();
+	}
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::AI_doTurnPre");
+		AI_doTurnPre();
+	}
 	if (getRevolutionTimer() > 0)
 	{
 		changeRevolutionTimer(-1);
@@ -4468,7 +4598,10 @@ void CvPlayer::doTurn()
 
 	setConscriptCount(0);
 
-	AI_assignWorkingPlots();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::assign_working_plots");
+		AI_assignWorkingPlots();
+	}
 
 	if (0 == GET_TEAM(getTeam()).getHasMetCivCount(true) || GC.getGameINLINE().isOption(GAMEOPTION_NO_ESPIONAGE))
 	{
@@ -4492,13 +4625,16 @@ void CvPlayer::doTurn()
 /* Advanced Diplomacy          END                                                            */
 /************************************************************************************************/
 
-	verifyGoldCommercePercent();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::economy_research_espionage");
+		verifyGoldCommercePercent();
 
-	doGold();
+		doGold();
 
-	doResearch();
+		doResearch();
 
-	doEspionagePoints();
+		doEspionagePoints();
+	}
 
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                      05/08/09                                jdog5000      */
@@ -4511,9 +4647,12 @@ void CvPlayer::doTurn()
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/
 
-	for (pLoopCity = firstCity(&iLoop); pLoopCity != NULL; pLoopCity = nextCity(&iLoop))
 	{
-		pLoopCity->doTurn();
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::city_do_turn_loop");
+		for (pLoopCity = firstCity(&iLoop); pLoopCity != NULL; pLoopCity = nextCity(&iLoop))
+		{
+			pLoopCity->doTurn();
+		}
 	}
 
 /*************************************************************************************************/
@@ -4537,11 +4676,14 @@ void CvPlayer::doTurn()
 		changeAnarchyTurns(-1);
 	}
 
-	verifyCivics();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::civics_trade_warweariness");
+		verifyCivics();
 
-	updateTradeRoutes();
+		updateTradeRoutes();
 
-	updateWarWearinessPercentAnger();
+		updateWarWearinessPercentAnger();
+	}
 
 //FfH: Added by Kael 11/02/2007
     if (getTempPlayerTimer() > 0)
@@ -4576,13 +4718,19 @@ void CvPlayer::doTurn()
     }
 //FfH: End Add
 
-	doEvents();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::events");
+		doEvents();
+	}
 
-	updateEconomyHistory(GC.getGameINLINE().getGameTurn(), calculateTotalCommerce());
-	updateIndustryHistory(GC.getGameINLINE().getGameTurn(), calculateTotalYield(YIELD_PRODUCTION));
-	updateAgricultureHistory(GC.getGameINLINE().getGameTurn(), calculateTotalYield(YIELD_FOOD));
-	updatePowerHistory(GC.getGameINLINE().getGameTurn(), getPower());
-	updateCultureHistory(GC.getGameINLINE().getGameTurn(), countTotalCulture());
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::history_updates");
+		updateEconomyHistory(GC.getGameINLINE().getGameTurn(), calculateTotalCommerce());
+		updateIndustryHistory(GC.getGameINLINE().getGameTurn(), calculateTotalYield(YIELD_PRODUCTION));
+		updateAgricultureHistory(GC.getGameINLINE().getGameTurn(), calculateTotalYield(YIELD_FOOD));
+		updatePowerHistory(GC.getGameINLINE().getGameTurn(), getPower());
+		updateCultureHistory(GC.getGameINLINE().getGameTurn(), countTotalCulture());
+	}
 
 //FfH: Modified by Kael 09/28/2008
 //	updateEspionageHistory(GC.getGameINLINE().getGameTurn(), GET_TEAM(getTeam()).getEspionagePointsEver());
@@ -4605,7 +4753,10 @@ void CvPlayer::doTurn()
 
 	gDLL->getInterfaceIFace()->setDirty(CityInfo_DIRTY_BIT, true);
 
-	AI_doTurnPost();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::AI_doTurnPost");
+		AI_doTurnPost();
+	}
 
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                      07/08/09                                jdog5000      */
@@ -4620,82 +4771,98 @@ void CvPlayer::doTurn()
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/
 
-	CvEventReporter::getInstance().endPlayerTurn( GC.getGameINLINE().getGameTurn(),  getID());
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurn::end_player_turn");
+		CvEventReporter::getInstance().endPlayerTurn( GC.getGameINLINE().getGameTurn(),  getID());
+	}
 }
 
 
 void CvPlayer::doTurnUnits()
 {
 	PROFILE_FUNC();
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_PLAYER_DO_TURN_UNITS);
 
 	CvSelectionGroup* pLoopSelectionGroup;
 	int iLoop;
 
-	AI_doTurnUnitsPre();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurnUnits::AI_doTurnUnitsPre");
+		AI_doTurnUnitsPre();
+	}
 
 //FfH: Added By Kael 09/13/2007
 	CvUnit* pLoopUnit;
     int iSpell = GC.defines.iSPECIALUNIT_SPELL;
-	for (int iI = 0; iI < MAX_PLAYERS; iI++)
 	{
-		if (GET_PLAYER((PlayerTypes)iI).isEverAlive())
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurnUnits::kill_spell_units");
+		for (int iI = 0; iI < MAX_PLAYERS; iI++)
 		{
-            for (pLoopUnit = GET_PLAYER((PlayerTypes)iI).firstUnit(&iLoop); pLoopUnit != NULL; pLoopUnit = GET_PLAYER((PlayerTypes)iI).nextUnit(&iLoop))
-            {
-                if (pLoopUnit->getSpecialUnitType() == iSpell)
-                {
-					logBBAI("    Killing %S -- SPECIALUNIT_SPELL killed each turn (Unit %d - plot: %d, %d)",
-							pLoopUnit->getName().GetCString(), pLoopUnit->getID(), pLoopUnit->getX(), pLoopUnit->getY());
-                    pLoopUnit->kill(false);
-                }
-            }
+			if (GET_PLAYER((PlayerTypes)iI).isEverAlive())
+			{
+				for (pLoopUnit = GET_PLAYER((PlayerTypes)iI).firstUnit(&iLoop); pLoopUnit != NULL; pLoopUnit = GET_PLAYER((PlayerTypes)iI).nextUnit(&iLoop))
+				{
+					if (pLoopUnit->getSpecialUnitType() == iSpell)
+					{
+						logBBAI("    Killing %S -- SPECIALUNIT_SPELL killed each turn (Unit %d - plot: %d, %d)",
+								pLoopUnit->getName().GetCString(), pLoopUnit->getID(), pLoopUnit->getX(), pLoopUnit->getY());
+						pLoopUnit->kill(false);
+					}
+				}
+			}
 		}
 	}
 //FfH: End Add
 
-	for(pLoopSelectionGroup = firstSelectionGroup(&iLoop); pLoopSelectionGroup != NULL; pLoopSelectionGroup = nextSelectionGroup(&iLoop))
 	{
-		pLoopSelectionGroup->doDelayedDeath();
-	}
-
-	for (int iPass = 0; iPass < 4; iPass++)
-	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurnUnits::delayed_death");
 		for(pLoopSelectionGroup = firstSelectionGroup(&iLoop); pLoopSelectionGroup != NULL; pLoopSelectionGroup = nextSelectionGroup(&iLoop))
 		{
-			switch (pLoopSelectionGroup->getDomainType())
+			pLoopSelectionGroup->doDelayedDeath();
+		}
+	}
+
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurnUnits::selection_group_turns");
+		for (int iPass = 0; iPass < 4; iPass++)
+		{
+			for(pLoopSelectionGroup = firstSelectionGroup(&iLoop); pLoopSelectionGroup != NULL; pLoopSelectionGroup = nextSelectionGroup(&iLoop))
 			{
-			case DOMAIN_AIR:
-				if (iPass == 1)
+				switch (pLoopSelectionGroup->getDomainType())
 				{
-					pLoopSelectionGroup->doTurn();
+				case DOMAIN_AIR:
+					if (iPass == 1)
+					{
+						pLoopSelectionGroup->doTurn();
+					}
+					break;
+				case DOMAIN_SEA:
+					if (iPass == 2)
+					{
+						pLoopSelectionGroup->doTurn();
+					}
+					break;
+				case DOMAIN_LAND:
+					if (iPass == 3)
+					{
+						pLoopSelectionGroup->doTurn();
+					}
+					break;
+				case DOMAIN_IMMOBILE:
+					if (iPass == 0)
+					{
+						pLoopSelectionGroup->doTurn();
+					}
+					break;
+				case NO_DOMAIN:
+					FAssertMsg(NULL == pLoopSelectionGroup->getHeadUnit(), "Unit with no Domain");
+				default:
+					if (iPass == 3)
+					{
+						pLoopSelectionGroup->doTurn();
+					}
+					break;
 				}
-				break;
-			case DOMAIN_SEA:
-				if (iPass == 2)
-				{
-					pLoopSelectionGroup->doTurn();
-				}
-				break;
-			case DOMAIN_LAND:
-				if (iPass == 3)
-				{
-					pLoopSelectionGroup->doTurn();
-				}
-				break;
-			case DOMAIN_IMMOBILE:
-				if (iPass == 0)
-				{
-					pLoopSelectionGroup->doTurn();
-				}
-				break;
-			case NO_DOMAIN:
-				FAssertMsg(NULL == pLoopSelectionGroup->getHeadUnit(), "Unit with no Domain");
-			default:
-				if (iPass == 3)
-				{
-					pLoopSelectionGroup->doTurn();
-				}
-				break;
 			}
 		}
 	}
@@ -4710,7 +4877,10 @@ void CvPlayer::doTurnUnits()
 
 	gDLL->getInterfaceIFace()->setDirty(UnitInfo_DIRTY_BIT, true);
 
-	AI_doTurnUnitsPost();
+	{
+		MNAI_PROFILE_PLAYER_TURN("CvPlayer::doTurnUnits::AI_doTurnUnitsPost");
+		AI_doTurnUnitsPost();
+	}
 }
 
 /************************************************************************************************/
@@ -5539,6 +5709,7 @@ int CvPlayer::countOwnedBonuses(BonusTypes eBonus, bool bCheckBlockingFeatures) 
 int CvPlayer::countUnimprovedBonuses(CvArea* pArea, CvPlot* pFromPlot) const
 {
 	PROFILE_FUNC();
+	MNAI_PATH_REQUEST_CONTEXT("CvPlayer::countUnimprovedBonuses");
 
 	gDLL->getFAStarIFace()->ForceReset(&GC.getBorderFinder());
 
@@ -6256,11 +6427,11 @@ bool CvPlayer::canTradeItem(PlayerTypes eWhoTo, TradeData item, bool bTestDenial
     bool bCanTrade = true;
 	for (int iI = 0; iI < GC.getNumVoteSourceInfos(); iI++)
 	{
-	    if (isFullMember((VoteSourceTypes)iI))
+	    if (isFullMember((VoteSourceTypes)iI, "CvPlayer::canTradeItem::self"))
 	    {
 	        if (GC.getGameINLINE().isNoOutsideTechTrades((VoteSourceTypes)iI))
 	        {
-	            if (!GET_PLAYER(eWhoTo).isFullMember((VoteSourceTypes)iI))
+	            if (!GET_PLAYER(eWhoTo).isFullMember((VoteSourceTypes)iI, "CvPlayer::canTradeItem::other"))
 	            {
 	                bCanTrade = false;
 	            }
@@ -7110,13 +7281,21 @@ int CvPlayer::getNumAvailableBonuses(BonusTypes eBonus) const
 // lfgr 06/2019: Fix NoBonus to apply to correct VoteSource
 	for( int eVoteSource = 0; eVoteSource < GC.getNumVoteSourceInfos(); eVoteSource++ )
 	{
-		if( isFullMember( (VoteSourceTypes) eVoteSource ) )
+#ifdef MNAI_OPT_NOBONUS_VOTE_SOURCE_FIRST
+		if( GC.getGameINLINE().isNoBonus( (VoteSourceTypes) eVoteSource, eBonus )
+			&& isFullMember( (VoteSourceTypes) eVoteSource, "CvPlayer::getNumAvailableBonuses" ) )
+		{
+			return 0;
+		}
+#else
+		if( isFullMember( (VoteSourceTypes) eVoteSource, "CvPlayer::getNumAvailableBonuses" ) )
 		{
 			if( GC.getGameINLINE().isNoBonus( (VoteSourceTypes) eVoteSource, eBonus ) )
 			{
 				return 0;
 			}
 		}
+#endif
 	}
 //FfH: End Add
 
@@ -9267,6 +9446,56 @@ bool CvPlayer::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestEra, b
 		return false;
 	}
 
+#ifdef MNAI_PROFILE_CANBUILD_ORDER_DETAIL
+	if (mnaiCanBuildRequestRepeated(*this, pPlot, eBuild, bTestEra, bTestVisible))
+	{
+		MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_request");
+#ifdef MNAI_PROFILE_PATH_REQUESTS
+		const char* pszContext = mnaiGetPathRequestContext();
+		if (pszContext != NULL && strcmp(pszContext, "CvCityAI::AI_bestPlotBuild") == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_best_plot_build");
+		}
+		else if (pszContext != NULL && strcmp(pszContext, "CvCityAI::AI_updateBestBuild") == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_update_best_build");
+		}
+		else if (pszContext != NULL && strcmp(pszContext, "CvCityAI::AI_plotValue") == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_plot_value");
+		}
+		else if (pszContext != NULL && strcmp(pszContext, "CvPlayer::countUnimprovedBonuses") == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_count_unimproved_bonuses");
+		}
+		else if (pszContext != NULL && strcmp(pszContext, "CvCityAI::AI_countNumImprovableBonuses") == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_count_city_improvable_bonuses");
+		}
+		else if (pszContext != NULL && strcmp(pszContext, "CvPlayer::getBestRoute") == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_get_best_route");
+		}
+		else if (pszContext != NULL && strcmp(pszContext, "CvUnit::canBuild") == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_unit_can_build");
+		}
+		else if (pszContext != NULL && strncmp(pszContext, "CvUnitAI::", 10) == 0)
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_unit_ai");
+		}
+		else
+		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_duplicate_other");
+		}
+#endif
+	}
+	else
+	{
+		MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::turn_first_request");
+	}
+#endif
+
 	const CvBuildInfo& kBuild = GC.getBuildInfo(eBuild);
 	const TechTypes eTechPrereq = (TechTypes)kBuild.getTechPrereq();
 
@@ -9276,6 +9505,7 @@ bool CvPlayer::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestEra, b
 		{
 			if ((!bTestEra && !bTestVisible) || ((getCurrentRealEra() + 1) < GC.getTechInfo(eTechPrereq).getEra()))
 			{
+				MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::reject_tech");
 				return false;
 			}
 		}
@@ -9283,6 +9513,7 @@ bool CvPlayer::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestEra, b
 
 	if (!(pPlot->canBuild(eBuild, getID(), bTestVisible)))
 	{
+		MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::reject_plot");
 		return false;
 	}
 
@@ -9304,16 +9535,21 @@ bool CvPlayer::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestEra, b
 		{
 			if (!(GET_TEAM(getTeam()).isHasTech((TechTypes)kBuild.getFeatureTech(pPlot->getFeatureType()))))
 			{
+				MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::reject_feature_tech");
 				return false;
 			}
 		}
 
 		if (std::max(0, getGold()) < getBuildCost(pPlot, eBuild))
 		{
+			MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::reject_gold");
 			return false;
 		}
 	}
 
+	{
+		MNAI_PROFILE_CANBUILD_ORDER("CvPlayer::canBuild::accept");
+	}
 	return true;
 }
 
@@ -9334,6 +9570,8 @@ int CvPlayer::getBuildCost(const CvPlot* pPlot, BuildTypes eBuild) const
 RouteTypes CvPlayer::getBestRoute(CvPlot* pPlot) const
 {
 	PROFILE_FUNC();
+	MNAI_PATH_REQUEST_CONTEXT("CvPlayer::getBestRoute");
+
 
 	RouteTypes eRoute;
 	RouteTypes eBestRoute;
@@ -10324,7 +10562,7 @@ bool CvPlayer::canDoCivics(CivicTypes eCivic) const
 	for( int i = 0; i < GC.getNumVoteSourceInfos(); i++ )
 	{
 		VoteSourceTypes eVoteSource = (VoteSourceTypes) i;
-		if( isFullMember( eVoteSource )
+		if( isFullMember( eVoteSource, "CvPlayer::canDoCivics" )
 				&& GC.getGameINLINE().isForceCivicOption(
 						eVoteSource, (CivicOptionTypes) kCivic.getCivicOptionType() ) )
 		{
@@ -10441,7 +10679,7 @@ bool CvPlayer::canRevolution(CivicTypes* paeNewCivics) const
 		for( int i = 0; i < GC.getNumVoteSourceInfos(); i++ )
 		{
 			VoteSourceTypes eVoteSource = (VoteSourceTypes) i;
-			if( isFullMember( eVoteSource )  )
+			if( isFullMember( eVoteSource, "CvPlayer::canRevolution" )  )
 			{
 				for( int iCivicOption = 0; iCivicOption < GC.getNumCivicOptionInfos(); ++iCivicOption )
 				{
@@ -13728,6 +13966,7 @@ void CvPlayer::setTurnActiveForPbem(bool bActive)
 
 void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 {// LOL: consume long-time
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_SET_TURN_ACTIVE);
 	PROFILE_FUNC()
 	int iI;
 	if (isTurnActive() != bNewValue)
@@ -13860,8 +14099,11 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 
 			FAssertMsg(isAlive(), "isAlive is expected to be true");
 
-			setEndTurn(false);
-			GC.getGameINLINE().resetTurnTimer();
+				{
+					MNAI_PROFILE_PLAYER_TURN("CvPlayer::setTurnActive::active_begin");
+					setEndTurn(false);
+					GC.getGameINLINE().resetTurnTimer();
+				}
 
 			// If we are the Pitboss, send this player an email
 			if ( gDLL->IsPitbossHost() )
@@ -13890,18 +14132,21 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 					AI_doAdvancedStart();
 				}
 
-				if (GC.getGameINLINE().getElapsedGameTurns() > 0)
-				{
-					if (isAlive())
 					{
-						if (GC.getGameINLINE().isMPOption(MPOPTION_SIMULTANEOUS_TURNS))
+						MNAI_PROFILE_PLAYER_TURN("CvPlayer::setTurnActive::active_turn_units");
+						if (GC.getGameINLINE().getElapsedGameTurns() > 0)
 						{
-							doTurn();
-						}
+							if (isAlive())
+							{
+								if (GC.getGameINLINE().isMPOption(MPOPTION_SIMULTANEOUS_TURNS))
+								{
+									doTurn();
+								}
 
-						doTurnUnits();
+								doTurnUnits();
+							}
+						}
 					}
-				}
 
 				if ((getID() == GC.getGameINLINE().getActivePlayer()) && (GC.getGameINLINE().getElapsedGameTurns() > 0))
 				{
@@ -13915,15 +14160,19 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 					}
 				}
 
-				doWarnings();
+					{
+						MNAI_PROFILE_PLAYER_TURN("CvPlayer::setTurnActive::warnings");
+						doWarnings();
+					}
 
 #ifdef MNAI_AUTOVERIFY_AUTO_END_TURN
 				if (getID() == GC.getGameINLINE().getActivePlayer() && isHumanDisabled() && GC.getGameINLINE().getAIAutoPlay((PlayerTypes)getID()) > 0)
 				{
-					setEndTurn(true);
-				}
+						MNAI_PROFILE_PLAYER_TURN("CvPlayer::setTurnActive::autoverify_end_turn");
+						setEndTurn(true);
+					}
 #endif
-			}
+				}
 
 			if (getID() == GC.getGameINLINE().getActivePlayer())
 			{
@@ -13956,10 +14205,13 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 			{
 				if (!GC.getGameINLINE().isMPOption(MPOPTION_SIMULTANEOUS_TURNS))
 				{
-					if (isAlive())
-					{
-						doTurn();
-					}
+						{
+							MNAI_PROFILE_PLAYER_TURN("CvPlayer::setTurnActive::inactive_do_turn");
+							if (isAlive())
+							{
+								doTurn();
+							}
+						}
 
 					if ((GC.getGameINLINE().isPbem() || GC.getGameINLINE().isHotSeat()) && isHuman() && GC.getGameINLINE().countHumanPlayersAlive() > 1)
 					{
@@ -14005,9 +14257,12 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 			}
 		}
 
-		gDLL->getInterfaceIFace()->updateCursorType();
+			{
+				MNAI_PROFILE_PLAYER_TURN("CvPlayer::setTurnActive::tail_ui");
+				gDLL->getInterfaceIFace()->updateCursorType();
 
-		gDLL->getInterfaceIFace()->setDirty(Score_DIRTY_BIT, true);
+				gDLL->getInterfaceIFace()->setDirty(Score_DIRTY_BIT, true);
+			}
 
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                      08/21/09                                jdog5000      */
@@ -14016,9 +14271,10 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
 /************************************************************************************************/
 		// Plot danger cache
 		//if( GC.getGameINLINE().getNumGameTurnActive() != 1 )
-		{
-			GC.getMapINLINE().invalidateIsActivePlayerNoDangerCache();
-		}
+			{
+				MNAI_PROFILE_PLAYER_TURN("CvPlayer::setTurnActive::invalidate_no_danger_cache");
+				GC.getMapINLINE().invalidateIsActivePlayerNoDangerCache();
+			}
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/
@@ -26131,10 +26387,13 @@ void CvPlayer::setEndorsedResolution(VoteSourceTypes eVoteSource, const VoteSele
 	setLoyalMember(eVoteSource, true);
 }
 
-bool CvPlayer::isFullMember(VoteSourceTypes eVoteSource) const
+bool CvPlayer::isFullMember(VoteSourceTypes eVoteSource, const char* pszCaller) const
 {
 #ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
 	PROFILE_FUNC();
+#endif
+#ifdef MNAI_PROFILE_FULL_MEMBER_CALLERS
+	mnaiCountFullMemberCaller(pszCaller);
 #endif
 #if defined(USE_OLD_CODE)
 	if (NO_RELIGION != GC.getGameINLINE().getVoteSourceReligion(eVoteSource))
@@ -29003,7 +29262,7 @@ bool CvPlayer::isCultureNeedsEmptyRadius() const
 {
    	for (int iI = 0; iI < GC.getNumVoteSourceInfos(); ++iI)
 	{
-	    if (isFullMember((VoteSourceTypes)iI))
+	    if (isFullMember((VoteSourceTypes)iI, "CvPlayer::isCultureNeedsEmptyRadius"))
 	    {
 	        if (GC.getGameINLINE().isCultureNeedsEmptyRadius((VoteSourceTypes)iI))
 	        {

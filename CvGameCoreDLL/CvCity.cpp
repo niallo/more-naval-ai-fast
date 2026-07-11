@@ -40,6 +40,12 @@
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/
 
+#ifdef MNAI_PROFILE_CITY_TURN_DETAIL
+#define MNAI_PROFILE_CITY_TURN(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_CITY_TURN(name)
+#endif
+
 // Public Functions...
 
 CvCity::CvCity()
@@ -1235,6 +1241,7 @@ void CvCity::kill(bool bUpdatePlotGroups)
 void CvCity::doTurn()
 {
 	PROFILE("CvCity::doTurn()");
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_CITY_DO_TURN);
 
 	CvPlot* pLoopPlot;
 	int iI;
@@ -1253,94 +1260,118 @@ void CvCity::doTurn()
 //Multiple Production: Added by Denev 07/10/2009
 	setBuiltFoodProducedUnit(false);
 //Multiple Production: End Add
-	AI_doTurn();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::AI_doTurn");
+		AI_doTurn();
+	}
 
-	bool bAllowNoProduction = !doCheckProduction();
+	bool bAllowNoProduction;
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::check_production");
+		bAllowNoProduction = !doCheckProduction();
+	}
 
 //FfH: Modified by Kael 08/04/2007
 //	doGrowth();
     if (!(GET_PLAYER(getOwnerINLINE()).isIgnoreFood()))
     {
-        doGrowth();
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::growth");
+		doGrowth();
     }
     bool bValid = false;
     CvUnit* pLoopUnit;
     CLLNode<IDInfo>* pUnitNode;
-    for (iI = 0; iI < GC.getNumBuildingInfos(); iI++)
-    {
-        if (getNumBuilding((BuildingTypes)iI) > 0)
-        {
-			CvBuildingInfo& kBuildingInfo = GC.getBuildingInfo((BuildingTypes)iI);
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::ffh_building_unit_effects");
+		for (iI = 0; iI < GC.getNumBuildingInfos(); iI++)
+		{
+			if (getNumBuilding((BuildingTypes)iI) > 0)
+			{
+				CvBuildingInfo& kBuildingInfo = GC.getBuildingInfo((BuildingTypes)iI);
 
-            if (kBuildingInfo.isRequiresCaster())
-            {
-                bValid = false;
-                pUnitNode = plot()->headUnitNode();
-                while (pUnitNode != NULL)
-                {
-                    pLoopUnit = ::getUnit(pUnitNode->m_data);
-                    pUnitNode = plot()->nextUnitNode(pUnitNode);
-                    for (int iJ = 0; iJ < GC.getNumSpellInfos(); iJ++)
-                    {
-                        if (pLoopUnit->canCast(iJ, true))
-                        {
-                            if (GC.getSpellInfo((SpellTypes)iJ).getCreateBuildingType() == iI)
-                            {
-                                bValid = true;
-                            }
-                        }
-                    }
-                }
-                if (!bValid)
-                {
-                    setNumRealBuilding((BuildingTypes)iI, 0);
-                }
-            }
-            if (kBuildingInfo.getRemovePromotion() != NO_PROMOTION)
-            {
-                pUnitNode = plot()->headUnitNode();
-                while (pUnitNode != NULL)
-                {
-                    pLoopUnit = ::getUnit(pUnitNode->m_data);
-                    pUnitNode = plot()->nextUnitNode(pUnitNode);
-                    if (pLoopUnit->isHasPromotion((PromotionTypes)kBuildingInfo.getRemovePromotion()))
-                    {
-                        pLoopUnit->setHasPromotion((PromotionTypes)kBuildingInfo.getRemovePromotion(), false);
-                    }
-                }
-            }
-            if (kBuildingInfo.isApplyFreePromotionOnMove())
-            {
-                if (kBuildingInfo.getFreePromotion() != NO_PROMOTION)
-                {
-                    pUnitNode = plot()->headUnitNode();
-                    while (pUnitNode != NULL)
-                    {
-                        pLoopUnit = ::getUnit(pUnitNode->m_data);
-                        pUnitNode = plot()->nextUnitNode(pUnitNode);
-                        if ((pLoopUnit->getUnitCombatType() != NO_UNITCOMBAT) && GC.getPromotionInfo((PromotionTypes)kBuildingInfo.getFreePromotion()).getUnitCombat(pLoopUnit->getUnitCombatType()))
-                        {
-                            pLoopUnit->setHasPromotion((PromotionTypes)kBuildingInfo.getFreePromotion(), true);
-                        }
-                    }
-                }
-            }
-        }
-    }
+				if (kBuildingInfo.isRequiresCaster())
+				{
+					bValid = false;
+					pUnitNode = plot()->headUnitNode();
+					while (pUnitNode != NULL)
+					{
+						pLoopUnit = ::getUnit(pUnitNode->m_data);
+						pUnitNode = plot()->nextUnitNode(pUnitNode);
+						for (int iJ = 0; iJ < GC.getNumSpellInfos(); iJ++)
+						{
+							if (pLoopUnit->canCast(iJ, true))
+							{
+								if (GC.getSpellInfo((SpellTypes)iJ).getCreateBuildingType() == iI)
+								{
+									bValid = true;
+								}
+							}
+						}
+					}
+					if (!bValid)
+					{
+						setNumRealBuilding((BuildingTypes)iI, 0);
+					}
+				}
+				if (kBuildingInfo.getRemovePromotion() != NO_PROMOTION)
+				{
+					pUnitNode = plot()->headUnitNode();
+					while (pUnitNode != NULL)
+					{
+						pLoopUnit = ::getUnit(pUnitNode->m_data);
+						pUnitNode = plot()->nextUnitNode(pUnitNode);
+						if (pLoopUnit->isHasPromotion((PromotionTypes)kBuildingInfo.getRemovePromotion()))
+						{
+							pLoopUnit->setHasPromotion((PromotionTypes)kBuildingInfo.getRemovePromotion(), false);
+						}
+					}
+				}
+				if (kBuildingInfo.isApplyFreePromotionOnMove())
+				{
+					if (kBuildingInfo.getFreePromotion() != NO_PROMOTION)
+					{
+						pUnitNode = plot()->headUnitNode();
+						while (pUnitNode != NULL)
+						{
+							pLoopUnit = ::getUnit(pUnitNode->m_data);
+							pUnitNode = plot()->nextUnitNode(pUnitNode);
+							if ((pLoopUnit->getUnitCombatType() != NO_UNITCOMBAT) && GC.getPromotionInfo((PromotionTypes)kBuildingInfo.getFreePromotion()).getUnitCombat(pLoopUnit->getUnitCombatType()))
+							{
+								pLoopUnit->setHasPromotion((PromotionTypes)kBuildingInfo.getFreePromotion(), true);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 //FfH: End Add
 
-	doCulture();
-	doPlotCulture(false, getOwnerINLINE(), getCommerceRate(COMMERCE_CULTURE));
-	doProduction(bAllowNoProduction);
-	doDecay();
-	doReligion();
-	doGreatPeople();
-	doMeltdown();
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::culture");
+		doCulture();
+		doPlotCulture(false, getOwnerINLINE(), getCommerceRate(COMMERCE_CULTURE));
+	}
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::production");
+		doProduction(bAllowNoProduction);
+	}
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::decay_religion_gp_meltdown");
+		doDecay();
+		doReligion();
+		doGreatPeople();
+		doMeltdown();
+	}
 
-	updateEspionageVisibility(true);
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::espionage_visibility");
+		updateEspionageVisibility(true);
+	}
 
 	if (!isDisorder())
 	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::worked_plot_improvements");
 //>>>>Unofficial Bug Fix: Modified by Denev 2010/04/04
 //		for (iI = 0; iI < NUM_CITY_PLOTS; iI++)
 		for (iI = 0; iI < getNumCityPlots(); iI++)
@@ -1433,7 +1464,10 @@ void CvCity::doTurn()
 	}
 
 	// ONEVENT - Do turn
-	CvEventReporter::getInstance().cityDoTurn(this, getOwnerINLINE());
+	{
+		MNAI_PROFILE_CITY_TURN("CvCity::doTurn::event_city_do_turn");
+		CvEventReporter::getInstance().cityDoTurn(this, getOwnerINLINE());
+	}
 
 	// XXX
 #ifdef _DEBUG
@@ -11833,13 +11867,21 @@ int CvCity::getNumBonuses(BonusTypes eIndex) const
 // lfgr 06/2019: Fix NoBonus to apply to correct VoteSource
 	for( int eVoteSource = 0; eVoteSource < GC.getNumVoteSourceInfos(); eVoteSource++ )
 	{
-		if( GET_PLAYER(getOwnerINLINE()).isFullMember( (VoteSourceTypes) eVoteSource ) )
+#ifdef MNAI_OPT_NOBONUS_VOTE_SOURCE_FIRST
+		if( GC.getGameINLINE().isNoBonus( (VoteSourceTypes) eVoteSource, eIndex )
+			&& GET_PLAYER(getOwnerINLINE()).isFullMember( (VoteSourceTypes) eVoteSource, "CvCity::isNoBonus" ) )
+		{
+			return 0;
+		}
+#else
+		if( GET_PLAYER(getOwnerINLINE()).isFullMember( (VoteSourceTypes) eVoteSource, "CvCity::isNoBonus" ) )
 		{
 			if( GC.getGameINLINE().isNoBonus( (VoteSourceTypes) eVoteSource, eIndex ) )
 			{
 				return 0;
 			}
 		}
+#endif
 	}
 //FfH: End Add
 

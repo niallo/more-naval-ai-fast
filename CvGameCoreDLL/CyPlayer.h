@@ -142,6 +142,9 @@ public:
 
 	int countTotalCulture();
 	int countOwnedBonuses(int /*BonusTypes*/ eBonus, bool bCheckBlockingFeatures);
+#ifdef MNAI_OPT_TOWER_MANA_OWNED_PLOT_SERVICE
+	int countOwnedBonusesByClasses(int /*BonusClassTypes*/ eFirstClass, int /*BonusClassTypes*/ eSecondClass);
+#endif
 	int countUnimprovedBonuses(CyArea* pArea, CyPlot* pFromPlot);
 	int countCityFeatures(int /*FeatureTypes*/ eFeature);
 	int countNumBuildings(int /*BuildingTypes*/ eBuilding);

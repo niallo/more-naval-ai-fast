@@ -445,6 +445,13 @@ int CyPlayer::countOwnedBonuses(int /*BonusTypes*/ eBonus, bool bCheckBlockingFe
 	return m_pPlayer ? m_pPlayer->countOwnedBonuses((BonusTypes)eBonus, bCheckBlockingFeatures) : NO_BONUS;
 }
 
+#ifdef MNAI_OPT_TOWER_MANA_OWNED_PLOT_SERVICE
+int CyPlayer::countOwnedBonusesByClasses(int /*BonusClassTypes*/ eFirstClass, int /*BonusClassTypes*/ eSecondClass)
+{
+	return m_pPlayer ? GET_PLAYER(m_pPlayer->getID()).AI_countOwnedBonusesByClasses((BonusClassTypes)eFirstClass, (BonusClassTypes)eSecondClass) : 0;
+}
+#endif
+
 int CyPlayer::countUnimprovedBonuses(CyArea* pArea, CyPlot* pFromPlot)
 {
 	return m_pPlayer ? m_pPlayer->countUnimprovedBonuses(pArea->getArea(), pFromPlot->getPlot()) : -1;
@@ -1974,7 +1981,7 @@ int CyPlayer::getVotes(int /*VoteTypes*/ eVote, int /*VoteSourceTypes*/ eVoteSou
 
 bool CyPlayer::isFullMember(int /*VoteSourceTypes*/ eVoteSource) const
 {
-	return m_pPlayer ? m_pPlayer->isFullMember((VoteSourceTypes)eVoteSource) : false;
+	return m_pPlayer ? m_pPlayer->isFullMember((VoteSourceTypes)eVoteSource, "CyPlayer::isFullMember") : false;
 }
 
 bool CyPlayer::isVotingMember(int /*VoteSourceTypes*/ eVoteSource) const

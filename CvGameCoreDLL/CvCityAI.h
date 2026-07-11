@@ -9,6 +9,8 @@
 #include "CvSelectionGroup.h"
 typedef std::vector<std::pair<UnitAITypes, int> > UnitTypeWeightArray;
 
+struct MnaiCityYieldValueContext;
+
 class CvCityAI : public CvCity
 {
 
@@ -248,8 +250,8 @@ protected:
 
 	bool AI_potentialPlot(short* piYields);
 	bool AI_foodAvailable(int iExtra = 0);
-	int AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood = false, bool bIgnoreGrowth = false, bool bIgnoreStarvation = false, bool bWorkerOptimization = false);
-	int AI_plotValue(CvPlot* pPlot, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood = false, bool bIgnoreGrowth = false, bool bIgnoreStarvation = false);
+	int AI_yieldValue(short* piYields, short* piCommerceYields, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood = false, bool bIgnoreGrowth = false, bool bIgnoreStarvation = false, bool bWorkerOptimization = false, const MnaiCityYieldValueContext* pMnaiYieldContext = NULL);
+	int AI_plotValue(CvPlot* pPlot, bool bAvoidGrowth, bool bRemove, bool bIgnoreFood = false, bool bIgnoreGrowth = false, bool bIgnoreStarvation = false, const MnaiCityYieldValueContext* pMnaiYieldContext = NULL);
 
 	int AI_experienceWeight();
 	int AI_buildUnitProb();

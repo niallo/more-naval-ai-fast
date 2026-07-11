@@ -1,5 +1,9 @@
 /CvGameCoreDLL/Release/
 /CvGameCoreDLL/Profile/
+/CvGameCoreDLL/ReleaseFast/
+/CvGameCoreDLL/ReleaseFastVerify/
+/CvGameCoreDLL/ReleaseFastTrace/
+/CvGameCoreDLL/ProfileFast/
 /CvGameCoreDLL/temp_files/
 /CvGameCoreDLL/_CL_*
 /CvGameCoreDLL/bin/

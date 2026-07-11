@@ -6,6 +6,7 @@
 from CvPythonExtensions import *
 import CvUtil
 import os
+import time
 
 try:
 	import BugPath
@@ -24,6 +25,7 @@ g_runId = ""
 g_player = -1
 g_lastLoggedTurn = -1
 g_lastResumeTurn = -1
+g_startWallMs = -1
 
 
 def _boolValue(value):
@@ -33,6 +35,10 @@ def _boolValue(value):
 
 def _clean(value):
 	return str(value).replace(",", "_").replace("\r", " ").replace("\n", " ").strip()
+
+
+def _nowMs():
+	return int(time.time() * 1000)
 
 
 def _settingsDir():
@@ -108,12 +114,17 @@ def _writeLog(event, currentTurn=None):
 	path = os.path.join(logsDir, "autoverify.csv")
 	writeHeader = not os.path.isfile(path)
 	try:
+		wallMs = _nowMs()
+		if g_startWallMs >= 0:
+			elapsedMs = wallMs - g_startWallMs
+		else:
+			elapsedMs = -1
 		logFile = open(path, "a")
 		if writeHeader:
-			logFile.write("run_id,event,start_turn,current_turn,target_turn\n")
+			logFile.write("run_id,event,start_turn,current_turn,target_turn,wall_ms,elapsed_ms\n")
 		if currentTurn is None:
 			currentTurn = game.getGameTurn()
-		logFile.write("%s,%s,%d,%d,%d\n" % (_clean(g_runId), _clean(event), g_startTurn, currentTurn, g_targetTurn))
+		logFile.write("%s,%s,%d,%d,%d,%d,%d\n" % (_clean(g_runId), _clean(event), g_startTurn, currentTurn, g_targetTurn, wallMs, elapsedMs))
 		logFile.close()
 	except:
 		CvUtil.pyPrint("AutoVerify: failed to write %s" % path)
@@ -126,8 +137,15 @@ def _setAutoPlay(turns):
 		game.setAIAutoPlay(g_player, turns)
 
 
+def _sendTurnComplete(source):
+	try:
+		CyMessageControl().sendTurnComplete()
+	except:
+		CvUtil.pyPrint("AutoVerify: failed to send turn complete from %s" % source)
+
+
 def _start(source):
-	global g_started, g_completed, g_startTurn, g_targetTurn, g_turns, g_runId, g_player, g_lastLoggedTurn, g_lastResumeTurn
+	global g_started, g_completed, g_startTurn, g_targetTurn, g_turns, g_runId, g_player, g_lastLoggedTurn, g_lastResumeTurn, g_startWallMs
 
 	if g_started or g_completed:
 		return
@@ -152,6 +170,7 @@ def _start(source):
 	g_targetTurn = g_startTurn + g_turns
 	g_lastLoggedTurn = -1
 	g_lastResumeTurn = -1
+	g_startWallMs = _nowMs()
 
 	if g_player < 0:
 		_writeLog("error_no_active_player")
@@ -161,6 +180,7 @@ def _start(source):
 	g_completed = False
 	_writeLog("start_%s" % source, g_startTurn)
 	_setAutoPlay(g_turns)
+	_sendTurnComplete(source)
 
 
 def _resumeIfNeeded(source, currentTurn):
@@ -182,6 +202,7 @@ def _resumeIfNeeded(source, currentTurn):
 		g_lastResumeTurn = currentTurn
 
 	_setAutoPlay(remainingTurns)
+	_sendTurnComplete(source)
 
 
 def _checkComplete(currentTurn):

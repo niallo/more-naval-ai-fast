@@ -325,8 +325,8 @@ void CvUnit::init(int iID, UnitTypes eUnit, UnitAITypes eUnitAI, PlayerTypes eOw
 	{
 	    changeFreePromotionPick(m_pUnitInfo->getFreePromotionPick());
         setPromotionReady(true);
-    }
-    GC.getGameINLINE().changeGlobalCounter(m_pUnitInfo->getModifyGlobalCounter());
+	}
+	GC.getGameINLINE().changeGlobalCounter(m_pUnitInfo->getModifyGlobalCounter());
 	m_iReligion = m_pUnitInfo->getReligionType();
     for (iI = 0; iI < GC.getNumBonusInfos(); iI++)
     {
@@ -8464,6 +8464,7 @@ bool CvUnit::goldenAge()
 
 bool CvUnit::canBuild(const CvPlot* pPlot, BuildTypes eBuild, bool bTestVisible) const
 {
+	MNAI_PATH_REQUEST_CONTEXT("CvUnit::canBuild");
     FAssertMsg(eBuild < GC.getNumBuildInfos(), "Index out of bounds");
 	if (!(m_pUnitInfo->getBuilds(eBuild)))
 	{
@@ -16515,7 +16516,7 @@ bool CvUnit::canCast(int spell, bool bTestVisible)
 			// Player must be on a council that provides the vote
 			for( int iVoteSource = 0; iVoteSource < GC.getNumVoteSourceInfos(); iVoteSource++ ) {
 				if( kVoteInfo.isVoteSourceType( iVoteSource )
-					&& GET_PLAYER( getOwnerINLINE() ).isFullMember( (VoteSourceTypes) iVoteSource ) ) {
+					&& GET_PLAYER( getOwnerINLINE() ).isFullMember( (VoteSourceTypes) iVoteSource, "CvUnit::canCast::votePrereq" ) ) {
 					bValid = true;
 				}
 			}

@@ -167,7 +167,6 @@ public :
 	const std::vector<BuildingClassUnitPair>& getUnitsWithBuildingClassPrereqs() const{
 		return m_vtUnitBuildingClassPrereqCache;
 	}
-
 	// Get all units the unit can upgrade to, including though several upgrades. Store them in the result vector.
 	void computeAvailableUpgrades( CivilizationTypes eCivilization, UnitTypes eFromUnit, std::vector<UnitTypes>& result );
 

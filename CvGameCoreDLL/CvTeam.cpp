@@ -3059,7 +3059,7 @@ bool CvTeam::isVotingMember(VoteSourceTypes eVoteSource) const
 	return (getVotes(NO_VOTE, eVoteSource) > 0);
 }
 
-bool CvTeam::isFullMember(VoteSourceTypes eVoteSource) const
+bool CvTeam::isFullMember(VoteSourceTypes eVoteSource, const char* pszCaller) const
 {
 	if (isForceTeamVoteEligible(eVoteSource))
 	{
@@ -3078,7 +3078,7 @@ bool CvTeam::isFullMember(VoteSourceTypes eVoteSource) const
 /************************************************************************************************/
 /* Advanced Diplomacy         END                                                               */
 /************************************************************************************************/
-			if (!kLoopPlayer.isFullMember(eVoteSource))
+			if (!kLoopPlayer.isFullMember(eVoteSource, pszCaller))
 			{
 				return false;
 			}

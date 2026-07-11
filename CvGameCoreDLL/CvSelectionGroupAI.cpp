@@ -185,12 +185,14 @@ bool CvSelectionGroupAI::AI_readyToUpdate()
 // Returns true if the group has become busy...
 bool CvSelectionGroupAI::AI_update()
 {
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_GROUP_AI_UPDATE);
 	CLLNode<IDInfo>* pEntityNode;
 	CvUnit* pLoopUnit;
 	bool bDead;
 	bool bFollow;
 
 	PROFILE("CvSelectionGroupAI::AI_update");
+	MNAI_PATH_REQUEST_CONTEXT("CvSelectionGroupAI::AI_update");
 
 	FAssert(getOwnerINLINE() != NO_PLAYER);
 

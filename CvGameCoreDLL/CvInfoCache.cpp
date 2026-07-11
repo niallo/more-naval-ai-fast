@@ -67,7 +67,7 @@ void CvInfoCache::init() {
 		}
 	}
 
-	// Compute all unit upgrades as lists
+		// Compute all unit upgrades as lists
 	for( int iUnit = 0; iUnit < GC.getNumUnitInfos(); iUnit++ ) {
 		m_aeUnitClassUpgradesByUnit.push_back( std::vector<UnitClassTypes>() );
 		for( int iUnitClass = 0; iUnitClass < GC.getNumUnitClassInfos(); iUnitClass++ ) {
@@ -106,7 +106,6 @@ bool CvInfoCache::AI_isUnitAmphib( UnitTypes eUnit ) const {
 	return m_aiUnitAmphibCache.at( eUnit );
 #endif
 }
-
 
 // Comparison function to sort units by unitclass. Used only for compatibility with old behavior.
 struct cmp_units_by_class {

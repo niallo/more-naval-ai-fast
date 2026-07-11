@@ -18,6 +18,12 @@
 #include "CvDLLEntityIFaceBase.h"
 #include "CvDLLFAStarIFaceBase.h"
 
+#ifdef MNAI_PROFILE_PATHVALID_ORDER_DETAIL
+#define MNAI_PROFILE_PATHVALID_ORDER(name) PROFILE(name)
+#else
+#define MNAI_PROFILE_PATHVALID_ORDER(name)
+#endif
+
 
 #define PATH_MOVEMENT_WEIGHT									(1000)
 #define PATH_RIVER_WEIGHT											(100)
@@ -38,6 +44,96 @@ static std::vector<char> g_abMNAIPathValidMoveThroughResult;
 static std::vector<int> g_aiMNAIPathValidMoveAttackGeneration;
 static std::vector<char> g_abMNAIPathValidMoveAttackResult;
 
+#ifdef MNAI_OPT_PATHVALID_STICKY_UPDATE_CACHE
+static int g_iMNAIPathValidStickyDepth = 0;
+static const CvSelectionGroup* g_pMNAIPathValidStickyGroup = NULL;
+static int g_iMNAIPathValidStickyFlags = 0;
+static __int64 g_iMNAIPathValidStickySignature = 0;
+#endif
+
+static void mnaiPathValidAdvanceGeneration()
+{
+	g_iMNAIPathValidCacheGeneration++;
+	if (g_iMNAIPathValidCacheGeneration <= 0)
+	{
+		std::fill(g_aiMNAIPathValidMoveThroughGeneration.begin(), g_aiMNAIPathValidMoveThroughGeneration.end(), 0);
+		std::fill(g_aiMNAIPathValidMoveAttackGeneration.begin(), g_aiMNAIPathValidMoveAttackGeneration.end(), 0);
+		g_iMNAIPathValidCacheGeneration = 1;
+	}
+}
+
+#ifdef MNAI_OPT_PATHVALID_STICKY_UPDATE_CACHE
+static void mnaiPathValidHashInt(__int64& iHash, int iValue)
+{
+	iHash = (iHash * 1099511628211I64) ^ (__int64)iValue;
+}
+
+static __int64 mnaiPathValidGroupSignature(const CvSelectionGroup* pSelectionGroup)
+{
+	MNAI_PROFILE_PATHVALID_ORDER("pathValid sticky group signature");
+	if (pSelectionGroup == NULL)
+	{
+		return 0;
+	}
+
+	__int64 iHash = 1469598103934665603I64;
+	mnaiPathValidHashInt(iHash, pSelectionGroup->getOwnerINLINE());
+	mnaiPathValidHashInt(iHash, pSelectionGroup->getID());
+	mnaiPathValidHashInt(iHash, pSelectionGroup->getNumUnits());
+
+	const CvPlot* pGroupPlot = pSelectionGroup->plot();
+	mnaiPathValidHashInt(iHash, (pGroupPlot != NULL) ? GC.getMapINLINE().plotNumINLINE(pGroupPlot->getX_INLINE(), pGroupPlot->getY_INLINE()) : -1);
+
+	CLLNode<IDInfo>* pUnitNode = pSelectionGroup->headUnitNode();
+	while (pUnitNode != NULL)
+	{
+		const CvUnit* pLoopUnit = ::getUnit(pUnitNode->m_data);
+		pUnitNode = pSelectionGroup->nextUnitNode(pUnitNode);
+		if (pLoopUnit == NULL)
+		{
+			mnaiPathValidHashInt(iHash, -1);
+			continue;
+		}
+
+		mnaiPathValidHashInt(iHash, pLoopUnit->getOwnerINLINE());
+		mnaiPathValidHashInt(iHash, pLoopUnit->getID());
+		mnaiPathValidHashInt(iHash, pLoopUnit->getUnitType());
+		mnaiPathValidHashInt(iHash, pLoopUnit->getX_INLINE());
+		mnaiPathValidHashInt(iHash, pLoopUnit->getY_INLINE());
+		mnaiPathValidHashInt(iHash, pLoopUnit->getDamage());
+		mnaiPathValidHashInt(iHash, pLoopUnit->getMoves());
+		mnaiPathValidHashInt(iHash, pLoopUnit->movesLeft());
+		mnaiPathValidHashInt(iHash, pLoopUnit->getCargo());
+		mnaiPathValidHashInt(iHash, pLoopUnit->isMadeAttack() ? 1 : 0);
+	}
+
+	return iHash;
+}
+
+MnaiPathValidStickyCacheScope::MnaiPathValidStickyCacheScope()
+{
+	g_iMNAIPathValidStickyDepth++;
+	if (g_iMNAIPathValidStickyDepth == 1)
+	{
+		g_pMNAIPathValidStickyGroup = NULL;
+		g_iMNAIPathValidStickyFlags = 0;
+		g_iMNAIPathValidStickySignature = 0;
+	}
+}
+
+MnaiPathValidStickyCacheScope::~MnaiPathValidStickyCacheScope()
+{
+	FAssert(g_iMNAIPathValidStickyDepth > 0);
+	g_iMNAIPathValidStickyDepth--;
+	if (g_iMNAIPathValidStickyDepth == 0)
+	{
+		g_pMNAIPathValidStickyGroup = NULL;
+		g_iMNAIPathValidStickyFlags = 0;
+		g_iMNAIPathValidStickySignature = 0;
+	}
+}
+#endif
+
 void mnaiBeginPathValidCache(const CvSelectionGroup* pSelectionGroup, int iFlags)
 {
 	const int iNumPlots = GC.getMapINLINE().numPlotsINLINE();
@@ -50,13 +146,28 @@ void mnaiBeginPathValidCache(const CvSelectionGroup* pSelectionGroup, int iFlags
 		g_abMNAIPathValidMoveAttackResult.assign(iNumPlots, 0);
 	}
 
-	g_iMNAIPathValidCacheGeneration++;
-	if (g_iMNAIPathValidCacheGeneration <= 0)
+#ifdef MNAI_OPT_PATHVALID_STICKY_UPDATE_CACHE
+	if (g_iMNAIPathValidStickyDepth > 0)
 	{
-		std::fill(g_aiMNAIPathValidMoveThroughGeneration.begin(), g_aiMNAIPathValidMoveThroughGeneration.end(), 0);
-		std::fill(g_aiMNAIPathValidMoveAttackGeneration.begin(), g_aiMNAIPathValidMoveAttackGeneration.end(), 0);
-		g_iMNAIPathValidCacheGeneration = 1;
+		const __int64 iSignature = mnaiPathValidGroupSignature(pSelectionGroup);
+		if (g_pMNAIPathValidStickyGroup != pSelectionGroup || g_iMNAIPathValidStickyFlags != iFlags || g_iMNAIPathValidStickySignature != iSignature)
+		{
+			mnaiPathValidAdvanceGeneration();
+			g_pMNAIPathValidStickyGroup = pSelectionGroup;
+			g_iMNAIPathValidStickyFlags = iFlags;
+			g_iMNAIPathValidStickySignature = iSignature;
+		}
 	}
+	else
+	{
+		mnaiPathValidAdvanceGeneration();
+		g_pMNAIPathValidStickyGroup = NULL;
+		g_iMNAIPathValidStickyFlags = 0;
+		g_iMNAIPathValidStickySignature = 0;
+	}
+#else
+	mnaiPathValidAdvanceGeneration();
+#endif
 
 	g_pMNAIPathValidCacheGroup = pSelectionGroup;
 	g_iMNAIPathValidCacheFlags = iFlags;
@@ -1845,11 +1956,25 @@ int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer
 	iWorstMax = MAX_INT;
 
 	pUnitNode = pSelectionGroup->headUnitNode();
+#ifdef MNAI_OPT_PATHCOST_SINGLE_UNIT_NEXT_SKIP
+	const bool bMnaiSingleUnitGroup = (pSelectionGroup->getNumUnits() == 1);
+#endif
 
 	while (pUnitNode != NULL)
 	{
 		pLoopUnit = ::getUnit(pUnitNode->m_data);
+#ifdef MNAI_OPT_PATHCOST_SINGLE_UNIT_NEXT_SKIP
+		if (bMnaiSingleUnitGroup)
+		{
+			pUnitNode = NULL;
+		}
+		else
+		{
+			pUnitNode = pSelectionGroup->nextUnitNode(pUnitNode);
+		}
+#else
 		pUnitNode = pSelectionGroup->nextUnitNode(pUnitNode);
+#endif
 		FAssertMsg(pLoopUnit->getDomainType() != DOMAIN_AIR, "pLoopUnit->getDomainType() is not expected to be equal with DOMAIN_AIR");
 
 		if (parent->m_iData1 > 0)
@@ -2107,6 +2232,40 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 
 	bAIControl = pSelectionGroup->AI_isControlled();
 
+#ifdef MNAI_OPT_PATHVALID_MOVE_BEFORE_DANGER
+	if (bAIControl || pFromPlot->isRevealed(pSelectionGroup->getHeadTeam(), false))
+	{
+#ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
+		PROFILE("pathValid move through");
+#endif
+
+		if (iFinderInfo & MOVE_THROUGH_ENEMY)
+		{
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+			if (!(mnaiPathValidCanMoveOrAttackInto(pSelectionGroup, pFromPlot)))
+#else
+			if (!(pSelectionGroup->canMoveOrAttackInto(pFromPlot)))
+#endif
+			{
+				MNAI_PROFILE_PATHVALID_ORDER("pathValid reject move attack");
+				return FALSE;
+			}
+		}
+		else
+		{
+#ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+			if (!(mnaiPathValidCanMoveThrough(pSelectionGroup, pFromPlot)))
+#else
+			if (!(pSelectionGroup->canMoveThrough(pFromPlot)))
+#endif
+			{
+				MNAI_PROFILE_PATHVALID_ORDER("pathValid reject move through");
+				return FALSE;
+			}
+		}
+	}
+#endif
+
 	if (bAIControl)
 	{
 #ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
@@ -2129,6 +2288,7 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/
 					{
+						MNAI_PROFILE_PATHVALID_ORDER("pathValid reject danger");
 						return FALSE;
 					}
 				}
@@ -2136,6 +2296,7 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 		}
 	}
 
+#ifndef MNAI_OPT_PATHVALID_MOVE_BEFORE_DANGER
 	if (bAIControl || pFromPlot->isRevealed(pSelectionGroup->getHeadTeam(), false))
 	{
 #ifndef MNAI_PROFILE_SKIP_TINY_HELPERS
@@ -2150,6 +2311,7 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 			if (!(pSelectionGroup->canMoveOrAttackInto(pFromPlot)))
 #endif
 			{
+				MNAI_PROFILE_PATHVALID_ORDER("pathValid reject move attack");
 				return FALSE;
 			}
 		}
@@ -2161,10 +2323,12 @@ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointe
 			if (!(pSelectionGroup->canMoveThrough(pFromPlot)))
 #endif
 			{
+				MNAI_PROFILE_PATHVALID_ORDER("pathValid reject move through");
 				return FALSE;
 			}
 		}
 	}
+#endif
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                       END                                                  */
 /************************************************************************************************/

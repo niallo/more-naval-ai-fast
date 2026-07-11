@@ -367,6 +367,17 @@ int pathAdd(FAStarNode* parent, FAStarNode* node, int data, const void* pointer,
 void mnaiBeginPathValidCache(const CvSelectionGroup* pSelectionGroup, int iFlags);
 void mnaiEndPathValidCache(const CvSelectionGroup* pSelectionGroup);
 #endif
+#if defined(MNAI_PROFILE_PATHVALID_MOVE_CACHE) && defined(MNAI_OPT_PATHVALID_STICKY_UPDATE_CACHE)
+class MnaiPathValidStickyCacheScope
+{
+public:
+	MnaiPathValidStickyCacheScope();
+	~MnaiPathValidStickyCacheScope();
+};
+#define MNAI_PATHVALID_STICKY_CACHE_SCOPE() MnaiPathValidStickyCacheScope mnaiPathValidStickyCacheScope
+#else
+#define MNAI_PATHVALID_STICKY_CACHE_SCOPE()
+#endif
 int stepDestValid(int iToX, int iToY, const void* pointer, FAStar* finder);
 int stepHeuristic(int iFromX, int iFromY, int iToX, int iToY);
 int stepValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);

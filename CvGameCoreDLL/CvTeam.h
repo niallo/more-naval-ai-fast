@@ -119,7 +119,7 @@ public:
 	int getNumNukeUnits() const;																												// Exposed to Python
 	int getVotes(VoteTypes eVote, VoteSourceTypes eVoteSource) const;
 	bool isVotingMember(VoteSourceTypes eVoteSource) const;
-	bool isFullMember(VoteSourceTypes eVoteSource) const;
+	bool isFullMember(VoteSourceTypes eVoteSource, const char* pszCaller = NULL) const;
 
 /************************************************************************************************/
 /* BETTER_BTS_AI_MOD                      01/10/09                                jdog5000      */

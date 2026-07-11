@@ -3719,6 +3719,7 @@ bool CvSelectionGroup::groupDeclareWar(CvPlot* pPlot, bool bForce)
 bool CvSelectionGroup::groupAttack(int iX, int iY, int iFlags, bool& bFailedAlreadyFighting)
 {
 	PROFILE_FUNC();
+	MNAI_PATH_REQUEST_CONTEXT("CvSelectionGroup::groupAttack");
 
 	CvPlot* pDestPlot = GC.getMapINLINE().plotINLINE(iX, iY);
 
@@ -4006,6 +4007,8 @@ void CvSelectionGroup::groupMove(CvPlot* pPlot, bool bCombat, CvUnit* pCombatUni
 // Returns true if move was made...
 bool CvSelectionGroup::groupPathTo(int iX, int iY, int iFlags)
 {
+	MNAI_PATH_REQUEST_CONTEXT("CvSelectionGroup::groupPathTo");
+
 	CvPlot* pDestPlot;
 	CvPlot* pPathPlot;
 
@@ -4844,9 +4847,14 @@ CvPlot* CvSelectionGroup::getPathEndTurnPlot() const
 bool CvSelectionGroup::generatePath( const CvPlot* pFromPlot, const CvPlot* pToPlot, int iFlags, bool bReuse, int* piPathTurns) const
 {
 	PROFILE("CvSelectionGroup::generatePath()")
+	MNAI_RELEASE_TRACE_SCOPE(MNAI_TRACE_GENERATE_PATH);
 
 	FAStarNode* pNode;
 	bool bSuccess;
+#ifdef MNAI_PROFILE_PATH_REQUESTS
+	LARGE_INTEGER mnaiPathStartTime;
+	QueryPerformanceCounter(&mnaiPathStartTime);
+#endif
 
 	gDLL->getFAStarIFace()->SetData(&GC.getPathFinder(), this);
 
@@ -4872,6 +4880,12 @@ bool CvSelectionGroup::generatePath( const CvPlot* pFromPlot, const CvPlot* pToP
 			}
 		}
 	}
+
+#ifdef MNAI_PROFILE_PATH_REQUESTS
+	LARGE_INTEGER mnaiPathEndTime;
+	QueryPerformanceCounter(&mnaiPathEndTime);
+	mnaiRecordPathRequest(mnaiGetPathRequestContext(), this, pFromPlot, pToPlot, iFlags, bReuse, bSuccess, (piPathTurns != NULL) ? *piPathTurns : MAX_INT, mnaiPathEndTime.QuadPart - mnaiPathStartTime.QuadPart);
+#endif
 
 	return bSuccess;
 }

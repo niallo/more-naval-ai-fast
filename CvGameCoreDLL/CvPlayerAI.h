@@ -456,6 +456,13 @@ public:
 
 	int AI_getNumCitySites() const;
 	CvPlot* AI_getCitySite(int iIndex) const;
+#ifdef MNAI_OPT_ROUTE_TERRITORY_OWNED_PLOT_CACHE
+	const std::vector<int>& AI_getOwnedPlots() const;
+	void AI_invalidateOwnedPlotCache() const;
+#ifdef MNAI_OPT_TOWER_MANA_OWNED_PLOT_SERVICE
+	int AI_countOwnedBonusesByClasses(BonusClassTypes eFirstClass, BonusClassTypes eSecondClass) const;
+#endif
+#endif
 
 	bool AI_deduceCitySite(CvCity* pCity) const; // K-Mod
 	int AI_bestAreaUnitAIValue(UnitAITypes eUnitAI, CvArea* pArea, UnitTypes* peBestUnitType = NULL) const;
@@ -611,6 +618,10 @@ protected:
 	int** m_aaiMemoryCount;
 
 	mutable std::vector<int> m_aiAICitySites;
+#ifdef MNAI_OPT_ROUTE_TERRITORY_OWNED_PLOT_CACHE
+	mutable std::vector<int> m_aiMnaiOwnedPlotsCache;
+	mutable int m_iMnaiOwnedPlotsCacheTurn;
+#endif
 
 	bool m_bWasFinancialTrouble;
 	int m_iTurnLastProductionDirty;

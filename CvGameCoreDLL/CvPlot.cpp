@@ -6093,6 +6093,17 @@ void CvPlot::setOwner(PlayerTypes eNewValue, bool bCheckUnits, bool bUpdatePlotG
 
 	if (getOwnerINLINE() != eNewValue)
 	{
+#ifdef MNAI_OPT_ROUTE_TERRITORY_OWNED_PLOT_CACHE
+		PlayerTypes eOldOwner = getOwnerINLINE();
+		if (eOldOwner != NO_PLAYER)
+		{
+			GET_PLAYER(eOldOwner).AI_invalidateOwnedPlotCache();
+		}
+		if (eNewValue != NO_PLAYER)
+		{
+			GET_PLAYER(eNewValue).AI_invalidateOwnedPlotCache();
+		}
+#endif
 		GC.getGameINLINE().addReplayMessage(REPLAY_MESSAGE_PLOT_OWNER_CHANGE, eNewValue, (char*)NULL, getX_INLINE(), getY_INLINE());
 
 		pOldCity = getPlotCity();
