@@ -1584,6 +1584,9 @@ Do not retry these without new evidence or a different design:
 
 ## Build
 
+For the arm64 OpenCiv4 target, follow the [native build guide](doc/openciv4.md).
+The commands below build the Windows game core under Wine.
+
 Legacy profile build:
 
 ```sh

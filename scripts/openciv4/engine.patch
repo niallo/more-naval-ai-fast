@@ -1,0 +1,126 @@
+diff --git a/apps/oc4core/GameCoreImports.cpp b/apps/oc4core/GameCoreImports.cpp
+index 242ca5b..ed96acc 100644
+--- a/apps/oc4core/GameCoreImports.cpp
++++ b/apps/oc4core/GameCoreImports.cpp
+@@ -12,10 +12,8 @@ void DLLPublishToPython();
+ 
+ namespace oc4::host
+ {
+-	std::filesystem::path loadGameCore(const std::optional<std::filesystem::path>& modAssets)
++	std::filesystem::path loadGameCore(const std::optional<std::filesystem::path>&)
+ 	{
+-		if (modAssets)
+-			std::fprintf(stderr, "[oc4core] a mod's own game core is not loaded on this platform yet: running the vanilla one\n");
+ 		Dl_info info{};
+ 		if (!dladdr(reinterpret_cast<const void*>(&DLLPublishToPython), &info) || !info.dli_fname)
+ 			throw std::runtime_error("cannot locate the game core");
+diff --git a/apps/oc4core/SaveFile.cpp b/apps/oc4core/SaveFile.cpp
+index cd2eed2..4d1f6b7 100644
+--- a/apps/oc4core/SaveFile.cpp
++++ b/apps/oc4core/SaveFile.cpp
+@@ -175,7 +175,23 @@ namespace oc4::host
+ 		}
+ 		s.gameData = inflateStream(compressed);
+ 		s.pythonData = r.str();
+-		r.bytes(kTrailerZeros);
++		r.need(kTrailerZeros + sizeof(int));
++		// Older saves can store turn-summary records between Python data and the trailing checksum.
++		constexpr size_t checksumSize = 32;
++		const size_t checksumOffset = file.size() >= sizeof(int) + checksumSize
++			? file.size() - sizeof(int) - checksumSize : 0;
++		if (checksumOffset >= r.p + kTrailerZeros)
++		{
++			Reader trailer{ file, checksumOffset };
++			if (trailer.i32() == checksumSize)
++				r.p = checksumOffset;
++			else
++				r.p += kTrailerZeros;
++		}
++		else
++		{
++			r.p += kTrailerZeros;
++		}
+ 		s.md5 = r.str();
+ 		return s;
+ 	}
+diff --git a/apps/oc4core/main.cpp b/apps/oc4core/main.cpp
+index d18f8ef..ff996d9 100644
+--- a/apps/oc4core/main.cpp
++++ b/apps/oc4core/main.cpp
+@@ -2031,7 +2031,10 @@ int wmain(int argc, wchar_t** argv)
+ 
+ 		std::vector<fs::path> mapDirs;
+ 		if (modDir)
++		{
++			mapDirs.push_back(*modDir / "PrivateMaps");
+ 			mapDirs.push_back(*modDir / "PublicMaps");
++		}
+ 		for (const char* layer : { "Beyond the Sword/PublicMaps", "Warlords/PublicMaps", "PublicMaps" })
+ 			mapDirs.push_back(opt.civ4Root / layer);
+ 		for (const fs::path& dir : mapDirs)
+@@ -2105,14 +2108,7 @@ int wmain(int argc, wchar_t** argv)
+ 			"print >>out, '  units %d, buildings %d, techs %d, civilizations %d, leaders %d, promotions %d, terrains %d, events %d' % (\n"
+ 			"    gc.getNumUnitInfos(), gc.getNumBuildingInfos(), gc.getNumTechInfos(), gc.getNumCivilizationInfos(),\n"
+ 			"    gc.getNumLeaderHeadInfos(), gc.getNumPromotionInfos(), gc.getNumTerrainInfos(), gc.getNumEventInfos())\n"
+-			"u = gc.getUnitInfo(gc.getInfoTypeForString('UNIT_WARRIOR'))\n"
+-			"print >>out, '  UNIT_WARRIOR: %s, \"%s\", strength %d, cost %d' % (u.getType(), u.getDescription(), u.getCombat(), u.getProductionCost())\n"
+-			"t = gc.getTechInfo(gc.getInfoTypeForString('TECH_BRONZE_WORKING'))\n"
+-			"print >>out, '  TECH_BRONZE_WORKING: \"%s\", cost %d, era %s' % (t.getDescription(), t.getResearchCost(), gc.getEraInfo(t.getEra()).getType())\n"
+-			"print >>out, '  enums: %s = %d, %r' % (cpe.UnitAITypes.UNITAI_ATTACK, cpe.UnitAITypes.UNITAI_ATTACK, cpe.DomainTypes.DOMAIN_SEA)\n"
+-			"c = gc.getCivilizationInfo(gc.getInfoTypeForString('CIVILIZATION_AMERICA'))\n"
+-			"print >>out, '  audio script ids: America select %d, action %d' % (c.getSelectionSoundScriptId(), c.getActionSoundScriptId())\n"
+-			"print >>out, '  define MAX_CIV_PLAYERS = %d, START_YEAR = %d' % (gc.getMAX_CIV_PLAYERS(), gc.getDefineINT('START_YEAR'))\n");
++			"print >>out, '  start year %d' % gc.getDefineINT('START_YEAR')\n");
+ 
+ 		if (!opt.probeSave.empty())
+ 		{
+diff --git a/apps/oc4core/python/oc4screens.py b/apps/oc4core/python/oc4screens.py
+index 6307dbd..6a6e19b 100644
+--- a/apps/oc4core/python/oc4screens.py
++++ b/apps/oc4core/python/oc4screens.py
+@@ -2387,7 +2387,10 @@ class CyEngine(object):
+ 	def getSelectionCursorVisibility(self): return _engineFlags['cursor']
+ 	def setSelectionCursorVisibility(self, b): _engineFlags['cursor'] = bool(b)
+ 	# the plots it marks (oc4host keeps them, the window draws them): coloured, outlined
+-	def addColoredPlot(self, iX, iY, color, ePlotStyle, eLayer):
++	def addColoredPlot(self, iX, iY, color, ePlotStyle, eLayer=None):
++		# The Mac game accepts a layer without a separate style argument.
++		if eLayer is None:
++			eLayer = ePlotStyle
+ 		oc4host.engine_mark(_int(iX), _int(iY), float(color.r), float(color.g), float(color.b), float(color.a), _int(eLayer, 0), False)
+ 
+ 	def addColoredPlotAlt(self, iX, iY, ePlotStyle, eLayer, szColor, fAlpha):
+diff --git a/gamecore/CMakeLists.txt b/gamecore/CMakeLists.txt
+index 3a23ba5..73b4e06 100644
+--- a/gamecore/CMakeLists.txt
++++ b/gamecore/CMakeLists.txt
+@@ -40,7 +40,14 @@ endif()
+ 
+ # The vanilla game core; its headers are what the host is compiled against.
+ # CvTextScreens.cpp is not part of the original project (references a missing CvTextMgr.h).
+-oc4_add_game_core(CvGameCoreDLL SOURCE_DIR CvGameCoreDLL EXCLUDE CvTextScreens.cpp PUBLIC_HEADERS STANDARD_FOR_SCOPE)
++set(OC4_MNAI_SOURCE_DIR "" CACHE PATH "Ported More Naval AI Fast game core")
++set(OC4_MNAI_DEFINITIONS "" CACHE STRING "More Naval AI Fast ReleaseFast compiler definitions")
++if(OC4_MNAI_SOURCE_DIR)
++	oc4_add_game_core(CvGameCoreDLL SOURCE_DIR "${OC4_MNAI_SOURCE_DIR}" EXCLUDE CvTextScreens.cpp PUBLIC_HEADERS STANDARD_FOR_SCOPE)
++	target_compile_definitions(CvGameCoreDLL PUBLIC ${OC4_MNAI_DEFINITIONS})
++else()
++	oc4_add_game_core(CvGameCoreDLL SOURCE_DIR CvGameCoreDLL EXCLUDE CvTextScreens.cpp PUBLIC_HEADERS STANDARD_FOR_SCOPE)
++endif()
+ 
+ # Profile-guided optimisation of the game core, driven by tools\pgo.cmd: GEN links an
+ # instrumented DLL that counts what AI autoplay runs through, USE links the DLL optimised
+diff --git a/gamecore/compat/hash_map b/gamecore/compat/hash_map
+index 383f35f..4df40c9 100644
+--- a/gamecore/compat/hash_map
++++ b/gamecore/compat/hash_map
+@@ -100,7 +100,8 @@ namespace stdext
+ 		{
+ 			if (this != &other)
+ 			{
+-				m_list = other.m_list;
++				List copied(other.m_list);
++				m_list.swap(copied);
+ 				m_mask = other.m_mask;
+ 				m_maxidx = other.m_maxidx;
+ 				m_comp = other.m_comp;

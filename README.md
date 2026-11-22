@@ -8,7 +8,8 @@ MNAI project README; it is the local engineering workspace used to build,
 profile, benchmark, and continue improving a faster `CvGameCoreDLL.dll`.
 
 **Jump to:** [current performance](#current-state) ·
-[accepted optimizations](#what-is-optimized) · [builds](#build-releasefast) ·
+[accepted optimizations](#what-is-optimized) · [Wine build](#build-releasefast) ·
+[native OpenCiv4 build](doc/openciv4.md) ·
 [benchmarking](#run-the-unattended-benchmark) ·
 [contributor workflow](#guidance-for-future-agents)
 
@@ -156,15 +157,21 @@ those before retrying a similar idea.
 ```text
 CvGameCoreDLL/                  C++ DLL source and Wine build scripts
 python/                         Python hook changes, including AutoVerify
-scripts/                        unattended run and benchmark helpers
+scripts/                        native build, unattended run, and benchmark helpers
 profiling/autoverify/           benchmark batches and summaries
 AGENTS.md                       detailed setup, history, and continuation notes
 README.md                       this overview
 ```
 
-## Build Prerequisites
+## Native OpenCiv4 Build
 
-This build uses the Civ4-era Windows toolchain under Wine:
+On Apple Silicon, build the arm64 OpenCiv4 engine and this fork's game core
+together using the existing Beyond the Sword and More Naval AI assets. See
+[the native build and launch guide](doc/openciv4.md).
+
+## Wine Build Prerequisites
+
+The Wine build uses the Civ4-era Windows toolchain under Wine:
 
 - GOG Civilization IV: The Complete Edition installed in a Porting Kit /
   Wineskin-style wrapper.

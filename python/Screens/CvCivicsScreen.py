@@ -59,15 +59,6 @@ class CvCivicsScreen( GenericAdvisorScreen ) : # lfgr 09/2019: Full-screen Advis
 		self.Y_TITLE = 8		
 		self.Z_TEXT = self.Z_SCREEN - 0.2
 
-		#RevolutionDCM start - revolutions screen adjustment
-		if (game.isOption(GameOptionTypes.GAMEOPTION_REVOLUTIONS)):
-			for l in range(gc.getNumCivicInfos()):
-				self.HEADINGS_HEIGHT = (((40 + self.BUTTON_SIZE + self.TEXT_MARGIN) * l/self.CIVICCATEGORIES)/5 * 2) + 260
-		else:
-			for l in range(gc.getNumCivicInfos()):
-				self.HEADINGS_HEIGHT = (((40 + self.BUTTON_SIZE + self.TEXT_MARGIN) * l/self.CIVICCATEGORIES)/5 * 2) + 160
-		#RevolutionDCM end
-		
 		self.CivicsScreenInputMap = {
 			self.BUTTON_NAME		: self.CivicsButton,
 			self.TEXT_NAME			: self.CivicsButton,

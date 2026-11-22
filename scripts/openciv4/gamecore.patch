@@ -1,0 +1,1914 @@
+diff --git a/CvGameCoreDLL/BetterBTSAI.cpp b/CvGameCoreDLL/BetterBTSAI.cpp
+index 5cd0d8c..a15575c 100644
+--- a/CvGameCoreDLL/BetterBTSAI.cpp
++++ b/CvGameCoreDLL/BetterBTSAI.cpp
+@@ -7,10 +7,14 @@
+ void logBBAI(char* format, ... )
+ {
+ #ifdef LOG_AI
+-	static char buf[2048];
+-	_vsnprintf( buf, 2048-4, format, (char*)(&format+1) );
++	char buf[2048];
++	va_list args;
++	va_start(args, format);
++	std::vsnprintf(buf, sizeof buf, format, args);
++	va_end(args);
+ 	TCHAR szFileName[1024];
+-	sprintf(szFileName, "BBAILog - %S.txt", GET_PLAYER(GC.getGameINLINE().getActivePlayer()).getName());
++	const PlayerTypes active = GC.getGameINLINE().getActivePlayer();
++	std::snprintf(szFileName, sizeof szFileName, "BBAILog - %ls.txt", active == NO_PLAYER ? L"game" : GET_PLAYER(active).getName());
+ 	gDLL->logMsg(szFileName, buf, false, false);
+ #endif
+ }
+\ No newline at end of file
+diff --git a/CvGameCoreDLL/CvBugOptions.cpp b/CvGameCoreDLL/CvBugOptions.cpp
+index cbeecba..0149a87 100644
+--- a/CvGameCoreDLL/CvBugOptions.cpp
++++ b/CvGameCoreDLL/CvBugOptions.cpp
+@@ -20,8 +20,11 @@ bool g_bIsBug = false;
+ 
+ void logMsg(const char* format, ...)
+ {
+-	static char buf[2048];
+-	_vsnprintf(buf, 2048 - 4, format, (char*)(&format + 1));
++	char buf[2048];
++	va_list args;
++	va_start(args, format);
++	std::vsnprintf(buf, sizeof buf, format, args);
++	va_end(args);
+ 	gDLL->logMsg("bull.log", buf);
+ }
+ 
+diff --git a/CvGameCoreDLL/CvCityAI.cpp b/CvGameCoreDLL/CvCityAI.cpp
+index ed7616d..5dd3d93 100644
+--- a/CvGameCoreDLL/CvCityAI.cpp
++++ b/CvGameCoreDLL/CvCityAI.cpp
+@@ -9005,7 +9005,7 @@ void CvCityAI::AI_updateBestBuild()
+ 
+ //FfH: Modified by Kael 02/05/2009
+ //		for (iI = 0; iI < NUM_CITY_PLOTS; iI++)
+-		for (iI = 0; iI < getNumCityPlots(); iI++)
++		for (int iI = 0; iI < getNumCityPlots(); iI++)
+ //FfH: End Modify
+ 		{
+ 			if (iI != CITY_HOME_PLOT)
+@@ -9093,7 +9093,7 @@ void CvCityAI::AI_updateBestBuild()
+ 			PROFILE("AI_updateBestBuild pruning phase");
+ //FfH: Modified by Kael 02/05/2009
+ //			for (iI = 0; iI < NUM_CITY_PLOTS; iI++)
+-			for (iI = 1; iI < getNumCityPlots(); iI++)
++			for (int iI = 1; iI < getNumCityPlots(); iI++)
+ //FfH: End Modify
+ 
+ 			{
+diff --git a/CvGameCoreDLL/CvDLLButtonPopup.cpp b/CvGameCoreDLL/CvDLLButtonPopup.cpp
+index f7468cf..47b5d7c 100644
+--- a/CvGameCoreDLL/CvDLLButtonPopup.cpp
++++ b/CvGameCoreDLL/CvDLLButtonPopup.cpp
+@@ -1858,7 +1858,7 @@ bool CvDLLButtonPopup::launchChangeCivicsPopup(CvPopup* pPopup, CvPopupInfo &inf
+ 		gDLL->getInterfaceIFace()->popupLaunch(pPopup, false, POPUPSTATE_MINIMIZED);
+ 	}
+ 
+-	SAFE_DELETE(paeNewCivics);
++	SAFE_DELETE_ARRAY(paeNewCivics);
+ 
+ 	return (bValid);
+ }
+diff --git a/CvGameCoreDLL/CvDLLPythonIFaceBase.h b/CvGameCoreDLL/CvDLLPythonIFaceBase.h
+index 41a715b..3371767 100644
+--- a/CvGameCoreDLL/CvDLLPythonIFaceBase.h
++++ b/CvGameCoreDLL/CvDLLPythonIFaceBase.h
+@@ -49,13 +49,13 @@ template <typename T>
+ PyObject* CvDLLPythonIFaceBase::makePythonObject(T* pObj)
+ {
+ 	if (!pObj)
++	{
++		Py_INCREF(Py_None);	// openciv4: callers treat the result as a new reference
+ 		return Py_None;
++	}
+ 
+-	boost::python::object bpo(pObj);
+-	PyObject* pyobj = bpo.ptr();
+-	Py_INCREF(pyobj);
+-	assert(pyobj->ob_refcnt==2);
+-	return pyobj;	// decrefs pyobj when bpo goes out of scope
++	// openciv4: like boost::python::object(T*), the Python object owns a copy of *pObj
++	return pybind11::cast(*pObj, pybind11::return_value_policy::copy).release().ptr();
+ }
+ 
+ //
+diff --git a/CvGameCoreDLL/CvDLLWidgetData.cpp b/CvGameCoreDLL/CvDLLWidgetData.cpp
+index 0e78bd8..6c51773 100644
+--- a/CvGameCoreDLL/CvDLLWidgetData.cpp
++++ b/CvGameCoreDLL/CvDLLWidgetData.cpp
+@@ -2133,7 +2133,7 @@ void CvDLLWidgetData::parseHurryHelp(CvWidgetDataStruct &widgetDataStruct, CvWSt
+ 						bFirst = false;
+ 					}
+ 					szBuffer.append(NEWLINE);
+-					szBuffer.append(gDLL->getText("TXT_KEY_MISC_HURRY_OVERFLOW", szOverflowBuffer));
++					szBuffer.append(gDLL->getText("TXT_KEY_MISC_HURRY_OVERFLOW", szOverflowBuffer.getCString()));
+ 				}
+ 			}
+ 		}
+@@ -6295,7 +6295,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			TechTypes eTech = (TechTypes)widgetDataStruct.m_iData2;
+ 			if (NO_TECH != eTech)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getTechInfo(eTech).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getTechInfo(eTech).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getTechInfo(eTech).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getTechInfo(eTech).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6309,7 +6309,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			UnitTypes eUnit = (UnitTypes)widgetDataStruct.m_iData2;
+ 			if (NO_UNIT != eUnit)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getUnitInfo(eUnit).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getUnitInfo(eUnit).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getUnitInfo(eUnit).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getUnitInfo(eUnit).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6319,7 +6319,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			BuildingTypes eBuilding = (BuildingTypes)widgetDataStruct.m_iData2;
+ 			if (NO_BUILDING != eBuilding)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getBuildingInfo(eBuilding).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getBuildingInfo(eBuilding).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getBuildingInfo(eBuilding).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getBuildingInfo(eBuilding).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6328,7 +6328,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			BonusTypes eBonus = (BonusTypes)widgetDataStruct.m_iData2;
+ 			if (NO_BONUS != eBonus)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getBonusInfo(eBonus).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getBonusInfo(eBonus).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getBonusInfo(eBonus).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getBonusInfo(eBonus).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6342,7 +6342,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			ImprovementTypes eImprovement = (ImprovementTypes)widgetDataStruct.m_iData2;
+ 			if (NO_IMPROVEMENT != eImprovement)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getImprovementInfo(eImprovement).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getImprovementInfo(eImprovement).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getImprovementInfo(eImprovement).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getImprovementInfo(eImprovement).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6351,7 +6351,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			UnitCombatTypes eGroup = (UnitCombatTypes)widgetDataStruct.m_iData2;
+ 			if (NO_UNITCOMBAT != eGroup)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getUnitCombatInfo(eGroup).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getUnitCombatInfo(eGroup).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getUnitCombatInfo(eGroup).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getUnitCombatInfo(eGroup).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6370,7 +6370,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			PromotionTypes ePromo = (PromotionTypes)widgetDataStruct.m_iData2;
+ 			if (NO_PROMOTION != ePromo)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getPromotionInfo(ePromo).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getPromotionInfo(ePromo).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getPromotionInfo(ePromo).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getPromotionInfo(ePromo).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6381,7 +6381,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			SpellTypes eSpell = (SpellTypes)widgetDataStruct.m_iData2;
+ 			if (NO_SPELL != eSpell)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getSpellInfo(eSpell).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getSpellInfo(eSpell).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? GC.getSpellInfo(eSpell).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getSpellInfo(eSpell).getTextKeyWide()).c_str());
+ 			}
+ 		}
+ 		break;
+@@ -6392,7 +6392,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			CivilizationTypes eCiv = (CivilizationTypes)widgetDataStruct.m_iData2;
+ 			if (NO_CIVILIZATION != eCiv)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getCivilizationInfo(eCiv).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getCivilizationInfo(eCiv).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getCivilizationInfo(eCiv).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getCivilizationInfo(eCiv).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6401,7 +6401,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			LeaderHeadTypes eLeader = (LeaderHeadTypes)widgetDataStruct.m_iData2;
+ 			if (NO_LEADER != eLeader)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getLeaderHeadInfo(eLeader).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getLeaderHeadInfo(eLeader).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getLeaderHeadInfo(eLeader).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getLeaderHeadInfo(eLeader).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6410,7 +6410,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			ReligionTypes eReligion = (ReligionTypes)widgetDataStruct.m_iData2;
+ 			if (NO_RELIGION != eReligion)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getReligionInfo(eReligion).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getReligionInfo(eReligion).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getReligionInfo(eReligion).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getReligionInfo(eReligion).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6419,7 +6419,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			CorporationTypes eCorporation = (CorporationTypes)widgetDataStruct.m_iData2;
+ 			if (NO_CORPORATION != eCorporation)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getCorporationInfo(eCorporation).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getCorporationInfo(eCorporation).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getCorporationInfo(eCorporation).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getCorporationInfo(eCorporation).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6428,7 +6428,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			CivicTypes eCivic = (CivicTypes)widgetDataStruct.m_iData2;
+ 			if (NO_CIVIC != eCivic)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getCivicInfo(eCivic).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getCivicInfo(eCivic).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getCivicInfo(eCivic).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getCivicInfo(eCivic).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6437,7 +6437,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			ProjectTypes eProject = (ProjectTypes)widgetDataStruct.m_iData2;
+ 			if (NO_PROJECT != eProject)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getProjectInfo(eProject).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getProjectInfo(eProject).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getProjectInfo(eProject).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getProjectInfo(eProject).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+@@ -6464,7 +6464,7 @@ void CvDLLWidgetData::parseDescriptionHelp(CvWidgetDataStruct &widgetDataStruct,
+ 			SpecialistTypes eSpecialist = (SpecialistTypes)widgetDataStruct.m_iData2;
+ 			if (NO_SPECIALIST != eSpecialist)
+ 			{
+-				szBuffer.assign(bMinimal ? GC.getSpecialistInfo(eSpecialist).getDescription() : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getSpecialistInfo(eSpecialist).getTextKeyWide()));
++				szBuffer.assign(bMinimal ? CvWString(GC.getSpecialistInfo(eSpecialist).getDescription()) : gDLL->getText("TXT_KEY_MISC_HISTORICAL_INFO", GC.getSpecialistInfo(eSpecialist).getTextKeyWide()));
+ 			}
+ 		}
+ 		break;
+diff --git a/CvGameCoreDLL/CvDllPythonEvents.cpp b/CvGameCoreDLL/CvDllPythonEvents.cpp
+index 4f9e226..fa8188d 100644
+--- a/CvGameCoreDLL/CvDllPythonEvents.cpp
++++ b/CvGameCoreDLL/CvDllPythonEvents.cpp
+@@ -715,7 +715,7 @@ void CvDllPythonEvents::reportSelectionGroupPushMission(CvSelectionGroup* pSelec
+ 
+ 		postEvent(eventData);
+ 
+-		delete aiUnitIds;
++		SAFE_DELETE_ARRAY(aiUnitIds);
+ 	}
+ }
+ 
+diff --git a/CvGameCoreDLL/CvGame.cpp b/CvGameCoreDLL/CvGame.cpp
+index a50edba..55182a3 100644
+--- a/CvGameCoreDLL/CvGame.cpp
++++ b/CvGameCoreDLL/CvGame.cpp
+@@ -2267,7 +2267,7 @@ void CvGame::normalizeAddExtras()
+ 								{
+ 									if (pLoopPlot->getBonusType() == NO_BONUS)
+ 									{
+-										for (int iK = 0; iK < GC.getNumBonusInfos(); iK++)
++										int iK; for (iK = 0; iK < GC.getNumBonusInfos(); iK++)
+ 										{
+ 											if (GC.getBonusInfo((BonusTypes)iK).isNormalize())
+ 											{
+@@ -2303,7 +2303,7 @@ void CvGame::normalizeAddExtras()
+ 												{
+ 												pLoopPlot->setFeatureType(NO_FEATURE);
+ 
+-													for (iK = 0; iK < GC.getNumBonusInfos(); iK++)
++													for (int iK = 0; iK < GC.getNumBonusInfos(); iK++)
+ 													{
+ 														if (GC.getBonusInfo((BonusTypes)iK).isNormalize())
+ 														{
+@@ -2342,7 +2342,7 @@ void CvGame::normalizeAddExtras()
+ */
+ 				shuffleArray(aiShuffle, iNumCityPlots, getMapRand());
+ 
+-				for (iJ = 0; iJ < iNumCityPlots; iJ++)
++				for (int iJ = 0; iJ < iNumCityPlots; iJ++)
+ //<<<<Unofficial Bug Fix: End Modify
+ 				{
+ 					if (GET_PLAYER((PlayerTypes)iI).AI_foundValue(pStartingPlot->getX_INLINE(), pStartingPlot->getY_INLINE(), -1, true) >= iTargetValue)
+@@ -3513,7 +3513,9 @@ int CvGame::countCivTeamsAlive() const
+ 
+ int CvGame::countCivTeamsEverAlive() const
+ {
+-	std::set<int> setTeamsEverAlive;
++	// openciv4: a flag per team instead of a std::set built on every call (hot in AI code)
++	bool abTeamEverAlive[MAX_TEAMS] = {};
++	int iCount = 0;
+ 
+ 	for (int iI = 0; iI < MAX_CIV_PLAYERS; iI++)
+ 	{
+@@ -3522,12 +3524,17 @@ int CvGame::countCivTeamsEverAlive() const
+ 		{
+ 			if (kPlayer.getParent() == NO_PLAYER)
+ 			{
+-				setTeamsEverAlive.insert(kPlayer.getTeam());
++				const int iTeam = kPlayer.getTeam();
++				if (iTeam >= 0 && iTeam < MAX_TEAMS && !abTeamEverAlive[iTeam])
++				{
++					abTeamEverAlive[iTeam] = true;
++					++iCount;
++				}
+ 			}
+ 		}
+ 	}
+ 
+-	return setTeamsEverAlive.size();
++	return iCount;
+ }
+ 
+ 
+@@ -9422,9 +9429,9 @@ void CvGame::read(FDataStreamBase* pStream)
+ 
+ 	{
+ 		clearReplayMessageMap();
+-		ReplayMessageList::_Alloc::size_type iSize;
++		unsigned int iSize;
+ 		pStream->Read(&iSize);
+-		for (ReplayMessageList::_Alloc::size_type i = 0; i < iSize; i++)
++		for (unsigned int i = 0; i < iSize; i++)
+ 		{
+ 			CvReplayMessage* pMessage = new CvReplayMessage(0);
+ 			if (NULL != pMessage)
+@@ -9669,7 +9676,7 @@ void CvGame::write(FDataStreamBase* pStream)
+ 	m_mapRand.write(pStream);
+ 	m_sorenRand.write(pStream);
+ 
+-	ReplayMessageList::_Alloc::size_type iSize = m_listReplayMessages.size();
++	unsigned int iSize = m_listReplayMessages.size();
+ 	pStream->Write(iSize);
+ 	ReplayMessageList::const_iterator it;
+ 	for (it = m_listReplayMessages.begin(); it != m_listReplayMessages.end(); it++)
+@@ -9885,8 +9892,11 @@ bool CvGame::hasSkippedSaveChecksum() const
+ //
+ void CvGame::logMsg(char* format, ... )
+ {
+-	static char buf[2048];
+-	_vsnprintf( buf, 2048-4, format, (char*)(&format+1) );
++	char buf[2048];
++	va_list args;
++	va_start(args, format);
++	std::vsnprintf(buf, sizeof buf, format, args);
++	va_end(args);
+ 	gDLL->logMsg("sdkDbg.log", buf);
+ }
+ 
+@@ -9988,7 +9998,7 @@ void CvGame::changeHumanPlayer( PlayerTypes eOldHuman, PlayerTypes eNewHuman )
+ 		GET_PLAYER(eNewHuman).setOption( (PlayerOptionTypes)iI, GET_PLAYER(eOldHuman).isOption((PlayerOptionTypes)iI) );
+ 	}
+ 
+-	for (iI = 0; iI < NUM_PLAYEROPTION_TYPES; iI++)
++	for (int iI = 0; iI < NUM_PLAYEROPTION_TYPES; iI++)
+ 	{
+ 		gDLL->sendPlayerOption(((PlayerOptionTypes)iI), GET_PLAYER(eNewHuman).isOption((PlayerOptionTypes)iI));
+ 	}
+diff --git a/CvGameCoreDLL/CvGameCoreDLL.h b/CvGameCoreDLL/CvGameCoreDLL.h
+index 49afe09..a611c26 100644
+--- a/CvGameCoreDLL/CvGameCoreDLL.h
++++ b/CvGameCoreDLL/CvGameCoreDLL.h
+@@ -16,7 +16,8 @@
+ #define WIN32_LEAN_AND_MEAN
+ #include <windows.h>
+ #include <MMSystem.h>
+-#if defined _DEBUG && !defined USE_MEMMANAGER
++// openciv4: the engine (OC4_GAMECORE_IMPORT) has no debug operator new, and the macros break its std::malloc.
++#if defined _DEBUG && !defined USE_MEMMANAGER && !defined OC4_GAMECORE_IMPORT
+ #define USE_MEMMANAGER
+ #include <crtdbg.h>
+ #endif
+@@ -27,8 +28,16 @@
+ #include <assert.h>
+ #include <map>
+ #include <hash_map>
++#include <algorithm>	// openciv4: VC7.1 pulled this in transitively
+ 
+-#define DllExport   __declspec( dllexport ) 
++// openciv4: the host includes these headers too and imports the DLL's classes.
++#if !defined(_WIN32)
++#define DllExport   __attribute__((visibility("default")))
++#elif defined(OC4_GAMECORE_IMPORT)
++#define DllExport   __declspec( dllimport )
++#else
++#define DllExport   __declspec( dllexport )
++#endif
+ 
+ //
+ // GameBryo
+@@ -120,7 +129,7 @@ namespace NiAnimationKey
+ typedef unsigned char    byte;
+ typedef unsigned short   word;
+ typedef unsigned int     uint;
+-typedef unsigned long    dword;
++typedef unsigned int     dword;	// openciv4: 32 bits as on Windows
+ typedef unsigned __int64 qword;
+ typedef wchar_t          wchar;
+ 
+@@ -307,7 +316,7 @@ namespace python = boost::python;
+ #include "CvDLLPythonIFaceBase.h"
+ #include "CvRandom.h"
+ #include "CvArea.h"
+-#include "CvDllEntity.h"
++#include "CvDLLEntity.h"
+ #include "CvDeal.h"
+ #include "CvDLLEntityIFaceBase.h"
+ #include "CvGame.h"
+diff --git a/CvGameCoreDLL/CvGameCoreUtils.cpp b/CvGameCoreDLL/CvGameCoreUtils.cpp
+index 0e7eaf5..2e8a8ee 100644
+--- a/CvGameCoreDLL/CvGameCoreUtils.cpp
++++ b/CvGameCoreDLL/CvGameCoreUtils.cpp
+@@ -2154,6 +2154,7 @@ int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer
+ }
+ 
+ 
++
+ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder)
+ {
+ 	CvSelectionGroup* pSelectionGroup;
+diff --git a/CvGameCoreDLL/CvGameCoreUtils.h b/CvGameCoreDLL/CvGameCoreUtils.h
+index d5d6846..97fa04a 100644
+--- a/CvGameCoreDLL/CvGameCoreUtils.h
++++ b/CvGameCoreDLL/CvGameCoreUtils.h
+@@ -362,6 +362,8 @@ int pathDestValid(int iToX, int iToY, const void* pointer, FAStar* finder);
+ int pathHeuristic(int iFromX, int iFromY, int iToX, int iToY);
+ int pathCost(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+ int pathValid(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
++// openciv4: incremented before every path search using pathValid, so pathValid can reuse a
++// result per node within one search (a search does not change the game state)
+ int pathAdd(FAStarNode* parent, FAStarNode* node, int data, const void* pointer, FAStar* finder);
+ #ifdef MNAI_PROFILE_PATHVALID_MOVE_CACHE
+ void mnaiBeginPathValidCache(const CvSelectionGroup* pSelectionGroup, int iFlags);
+diff --git a/CvGameCoreDLL/CvGameInterface.cpp b/CvGameCoreDLL/CvGameInterface.cpp
+index eabdfb2..ef972f1 100644
+--- a/CvGameCoreDLL/CvGameInterface.cpp
++++ b/CvGameCoreDLL/CvGameInterface.cpp
+@@ -2496,7 +2496,7 @@ void CvGame::startFlyoutMenu(const CvPlot* pPlot, std::vector<CvFlyoutMenuData>&
+ 
+ 			aFlyoutItems.push_back(CvFlyoutMenuData(NO_FLYOUT, -1, -1, -1, L""));
+ 
+-			for (int iI = 0; iI < GC.getNumHurryInfos(); iI++)
++			int iI; for (iI = 0; iI < GC.getNumHurryInfos(); iI++)
+ 			{
+ 				if (pCity->canHurry((HurryTypes)iI))
+ 				{
+@@ -2524,7 +2524,7 @@ void CvGame::startFlyoutMenu(const CvPlot* pPlot, std::vector<CvFlyoutMenuData>&
+ 				if (eConscriptUnit != NO_UNIT)
+ 				{
+ 					szBuffer = gDLL->getText("TXT_KEY_DRAFT_UNIT", GC.getUnitInfo(eConscriptUnit).getDescription(), pCity->getConscriptPopulation());
+-					aFlyoutItems.push_back(CvFlyoutMenuData(FLYOUT_CONSCRIPT, iI, pPlot->getX_INLINE(), pPlot->getY_INLINE(), szBuffer));
++					aFlyoutItems.push_back(CvFlyoutMenuData(FLYOUT_CONSCRIPT, static_cast<int>(eConscriptUnit), pPlot->getX_INLINE(), pPlot->getY_INLINE(), szBuffer));
+ 				}
+ 			}
+ 		}
+diff --git a/CvGameCoreDLL/CvGameTextMgr.cpp b/CvGameCoreDLL/CvGameTextMgr.cpp
+index adff8d3..cb8b24c 100644
+--- a/CvGameCoreDLL/CvGameTextMgr.cpp
++++ b/CvGameCoreDLL/CvGameTextMgr.cpp
+@@ -5741,7 +5741,7 @@ void CvGameTextMgr::setPlotHelp(CvWStringBuffer& szString, CvPlot* pPlot)
+ 							bLastInLine = true;
+ 							for (it = aTechValues.begin(); it != aTechValues.end(); ++it)
+ 							{
+-								if (it != NULL)
++								if (it != aTechValues.end())
+ 								{
+ 									if (iTechValue > (*it).second)
+ 									{
+@@ -5759,13 +5759,13 @@ void CvGameTextMgr::setPlotHelp(CvWStringBuffer& szString, CvPlot* pPlot)
+ 					}
+ 				}
+ 				it = aTechValues.begin();
+-				if (it != NULL)
++				if (it != aTechValues.end())
+ 				{
+ 					int iBestTechValue = (*it).second;
+ 					int iCount = 0;
+ 					for (it = aTechValues.begin(); it != aTechValues.end(); ++it)
+ 					{
+-						if (it != NULL)
++						if (it != aTechValues.end())
+ 						{
+ 							iCount++;
+ 							eLoopTech = (*it).first;
+@@ -11602,7 +11602,7 @@ void CvGameTextMgr::parseVoteInfo( CvWStringBuffer &szHelpText, VoteTypes eVote,
+ 					"Invalid arguments to parseVoteInfo: iAssignCity, ePlayer != NO_PLAYER, but "
+ 					"iCity == -1 or eOtherPlayer == NO_PLAYER" );
+ 			szHelpText.append( gDLL->getText( "TXT_KEY_VOTE_HELP_REASSIGN_CITY_FROM_TO",
+-					GET_PLAYER( ePlayer ).getCity( iCity )->getName(),
++					GET_PLAYER( ePlayer ).getCity( iCity )->getName().c_str(),
+ 					GET_PLAYER( ePlayer ).getNameKey(),
+ 					GET_PLAYER( eOtherPlayer ).getNameKey() ) );
+ 		}
+@@ -13761,7 +13761,7 @@ void CvGameTextMgr::setUnitHelp(CvWStringBuffer &szBuffer, UnitTypes eUnit, bool
+ 			}
+ 			else
+ 			{
+-				szTempBuffer.Format(L"%s%c", NEWLINE, gDLL->getSymbolID(BULLET_CHAR), szTempBuffer);
++				szTempBuffer.Format(L"%s%c", NEWLINE, gDLL->getSymbolID(BULLET_CHAR));
+ 				szBuffer.append(szTempBuffer);
+ 			}
+ 			if (kUnitInfo.getBonusProductionModifier(iI) == 100)
+@@ -15295,7 +15295,7 @@ void CvGameTextMgr::setBuildingHelpActual(CvWStringBuffer &szBuffer, BuildingTyp
+ 				}
+ 				else
+ 				{
+-					szTempBuffer.Format(L"\n%c", gDLL->getSymbolID(BULLET_CHAR), szTempBuffer);
++					szTempBuffer.Format(L"\n%c", gDLL->getSymbolID(BULLET_CHAR));
+ 					szBuffer.append(szTempBuffer);
+ 				}
+ 				if (kBuilding.getBonusProductionModifier(iI) == 100)
+@@ -16032,7 +16032,7 @@ void CvGameTextMgr::setProjectHelp(CvWStringBuffer &szBuffer, ProjectTypes eProj
+ 			}
+ 			else
+ 			{
+-				szTempBuffer.Format(L"%s%c", NEWLINE, gDLL->getSymbolID(BULLET_CHAR), szTempBuffer);
++				szTempBuffer.Format(L"%s%c", NEWLINE, gDLL->getSymbolID(BULLET_CHAR));
+ 				szBuffer.append(szTempBuffer);
+ 			}
+ 			if (kProject.getBonusProductionModifier(iI) == 100)
+@@ -22944,7 +22944,7 @@ void CvGameTextMgr::setEventHelp(CvWStringBuffer& szBuffer, EventTypes eEvent, i
+ 	if (kEvent.getCrime() != 0)
+ 	{
+ 		szBuffer.append(NEWLINE);
+-		szBuffer.append(gDLL->getText("TXT_KEY_EVENT_CRIME", kEvent.getCrime(), szCity));
++		szBuffer.append(gDLL->getText("TXT_KEY_EVENT_CRIME", kEvent.getCrime(), szCity.c_str()));
+ 	}
+ 	if (kEvent.getGlobalCounter() != 0)
+ 	{
+@@ -24362,7 +24362,7 @@ void CvGameTextMgr::assignFontIds(int iFirstSymbolCode, int iPadAmount)
+ 	int iCurSymbolID = iFirstSymbolCode;
+ 
+ 	// set yield symbols
+-	for (int i = 0; i < NUM_YIELD_TYPES; i++)
++	int i; for (i = 0; i < NUM_YIELD_TYPES; i++)
+ 	{
+ 		GC.getYieldInfo((YieldTypes) i).setChar(iCurSymbolID);
+ 		++iCurSymbolID;
+@@ -24374,7 +24374,7 @@ void CvGameTextMgr::assignFontIds(int iFirstSymbolCode, int iPadAmount)
+ 	} while (iCurSymbolID % iPadAmount != 0);
+ 
+ 	// set commerce symbols
+-	for (i=0;i<GC.getNUM_COMMERCE_TYPES();i++)
++	for (int i=0;i<GC.getNUM_COMMERCE_TYPES();i++)
+ 	{
+ 		GC.getCommerceInfo((CommerceTypes) i).setChar(iCurSymbolID);
+ 		++iCurSymbolID;
+@@ -24393,14 +24393,14 @@ void CvGameTextMgr::assignFontIds(int iFirstSymbolCode, int iPadAmount)
+ 		} while (iCurSymbolID % iPadAmount != 0);
+ 	}
+ 
+-	for (int i = 0; i < GC.getNumReligionInfos(); i++)
++	for (i = 0; i < GC.getNumReligionInfos(); i++)
+ 	{
+ 		GC.getReligionInfo((ReligionTypes) i).setChar(iCurSymbolID);
+ 		++iCurSymbolID;
+ 		GC.getReligionInfo((ReligionTypes) i).setHolyCityChar(iCurSymbolID);
+ 		++iCurSymbolID;
+ 	}
+-	for (i = 0; i < GC.getNumCorporationInfos(); i++)
++	for (int i = 0; i < GC.getNumCorporationInfos(); i++)
+ 	{
+ 		GC.getCorporationInfo((CorporationTypes) i).setChar(iCurSymbolID);
+ 		++iCurSymbolID;
+diff --git a/CvGameCoreDLL/CvGlobals.cpp b/CvGameCoreDLL/CvGlobals.cpp
+index 008d38b..8a10809 100644
+--- a/CvGameCoreDLL/CvGlobals.cpp
++++ b/CvGameCoreDLL/CvGlobals.cpp
+@@ -48,7 +48,7 @@
+ template <class T>
+ void deleteInfoArray(std::vector<T*>& array)
+ {
+-	for (std::vector<T*>::iterator it = array.begin(); it != array.end(); ++it)
++	for (typename std::vector<T*>::iterator it = array.begin(); it != array.end(); ++it)
+ 	{
+ 		SAFE_DELETE(*it);
+ 	}
+@@ -76,7 +76,7 @@ bool readInfoArray(FDataStreamBase* pStream, std::vector<T*>& array, const char*
+ 	}
+ 
+ 	int iIndex = 0;
+-	for (std::vector<T*>::iterator it = array.begin(); it != array.end(); ++it)
++	for (typename std::vector<T*>::iterator it = array.begin(); it != array.end(); ++it)
+ 	{
+ 		(*it)->read(pStream);
+ 		GC.setInfoTypeFromString((*it)->getType(), iIndex);
+@@ -92,7 +92,7 @@ bool writeInfoArray(FDataStreamBase* pStream,  std::vector<T*>& array)
+ 	int iSize = sizeof(T);
+ 	pStream->Write(iSize);
+ 	pStream->Write(array.size());
+-	for (std::vector<T*>::iterator it = array.begin(); it != array.end(); ++it)
++	for (typename std::vector<T*>::iterator it = array.begin(); it != array.end(); ++it)
+ 	{
+ 		(*it)->write(pStream);
+ 	}
+diff --git a/CvGameCoreDLL/CvGlobals.h b/CvGameCoreDLL/CvGlobals.h
+index 73385a1..4af029a 100644
+--- a/CvGameCoreDLL/CvGlobals.h
++++ b/CvGameCoreDLL/CvGlobals.h
+@@ -1348,7 +1348,7 @@ inline CvGlobals& CvGlobals::getInstance()
+ // helpers
+ //
+ #define GC CvGlobals::getInstance()
+-#ifndef _USRDLL
++#if !defined(_USRDLL) || defined(OC4_GAMECORE_IMPORT) // openciv4: the engine (built with _USRDLL) only uses exports, mods change CvGlobals
+ #define gDLL GC.getDLLIFaceNonInl()
+ #else
+ #define gDLL GC.getDLLIFace()
+diff --git a/CvGameCoreDLL/CvInfos.cpp b/CvGameCoreDLL/CvInfos.cpp
+index ad52b61..2b285a4 100644
+--- a/CvGameCoreDLL/CvInfos.cpp
++++ b/CvGameCoreDLL/CvInfos.cpp
+@@ -3366,7 +3366,7 @@ m_iDelay(0),
+ m_iImmobileTurns(0),
+ m_iMiscastChance(0),
+ m_iEffect(NO_EFFECT),
+-m_szSound(NULL),
++m_szSound(),
+ m_iCommandType(NO_COMMAND)
+ // MNAI begin
+ /*
+@@ -5243,7 +5243,7 @@ m_iWeaponTier(0),
+ m_iWithdrawlProbDefensive(0),
+ m_piBonusAffinity(NULL),
+ m_piDamageTypeCombat(NULL),
+-m_szImage(NULL)
++m_szImage()
+ //FfH: End Add
+ /************************************************************************************************/
+ /* Afforess	                  Start		 07/29/10                                               */
+@@ -6430,7 +6430,7 @@ const TCHAR* CvUnitInfo::getEarlyArtDefineTag(int i, UnitArtStyleTypes eStyle) c
+ 		}
+ 	}
+ 
+-	return (m_paszEarlyArtDefineTags) ? m_paszEarlyArtDefineTags[i] : NULL;
++	return (m_paszEarlyArtDefineTags) ? m_paszEarlyArtDefineTags[i].c_str() : NULL; // openciv4: not a pointer into a temporary CvString
+ }
+ 
+ void CvUnitInfo::setEarlyArtDefineTag(int i, const TCHAR* szVal)
+@@ -6459,7 +6459,7 @@ const TCHAR* CvUnitInfo::getLateArtDefineTag(int i, UnitArtStyleTypes eStyle) co
+ 
+ 	}
+ 
+-	return (m_paszLateArtDefineTags) ? m_paszLateArtDefineTags[i] : NULL;
++	return (m_paszLateArtDefineTags) ? m_paszLateArtDefineTags[i].c_str() : NULL; // openciv4: not a pointer into a temporary CvString
+ }
+ 
+ void CvUnitInfo::setLateArtDefineTag(int i, const TCHAR* szVal)
+@@ -6488,7 +6488,7 @@ const TCHAR* CvUnitInfo::getMiddleArtDefineTag(int i, UnitArtStyleTypes eStyle)
+ 
+ 	}
+ 
+-	return (m_paszMiddleArtDefineTags) ? m_paszMiddleArtDefineTags[i] : NULL;
++	return (m_paszMiddleArtDefineTags) ? m_paszMiddleArtDefineTags[i].c_str() : NULL; // openciv4: not a pointer into a temporary CvString
+ }
+ 
+ void CvUnitInfo::setMiddleArtDefineTag(int i, const TCHAR* szVal)
+@@ -6502,7 +6502,7 @@ const TCHAR* CvUnitInfo::getUnitNames(int i) const
+ {
+ 	FAssertMsg(i < getNumUnitNames(), "Index out of bounds");
+ 	FAssertMsg(i > -1, "Index out of bounds");
+-	return (m_paszUnitNames) ? m_paszUnitNames[i] : NULL;
++	return (m_paszUnitNames) ? m_paszUnitNames[i].c_str() : NULL; // openciv4: not a pointer into a temporary CvString
+ }
+ 
+ const TCHAR* CvUnitInfo::getFormationType() const
+diff --git a/CvGameCoreDLL/CvInfos.h b/CvGameCoreDLL/CvInfos.h
+index 4c7abbd..a45dd44 100644
+--- a/CvGameCoreDLL/CvInfos.h
++++ b/CvGameCoreDLL/CvInfos.h
+@@ -6244,6 +6244,8 @@ public:
+ 			return m_szVarietyButton;
+ 		}
+ 
++		int getNumFeatureArtPieces() const { return (int) m_aFeatureArtPieces.size(); }	// openciv4
++
+ 		const FeatureArtPiece &getFeatureArtPiece(int index) const
+ 		{
+ 			FAssertMsg((index >= 0) && (index < (int) m_aFeatureArtPieces.size()), "[Jason] Invalid feature art index.");
+diff --git a/CvGameCoreDLL/CvInfosRevolution.h b/CvGameCoreDLL/CvInfosRevolution.h
+index b4dc57e..c1249ca 100644
+--- a/CvGameCoreDLL/CvInfosRevolution.h
++++ b/CvGameCoreDLL/CvInfosRevolution.h
+@@ -5,6 +5,8 @@
+ #ifndef CV_INFOS_REVOLUTION_H
+ #define CV_INFOS_REVOLUTION_H
+ 
++class CvXMLLoadUtility;
++
+ // Revolution-related city effects.
+ class CvRevolutionEffects
+ {
+diff --git a/CvGameCoreDLL/CvInitCore.cpp b/CvGameCoreDLL/CvInitCore.cpp
+index 09acd80..f661456 100644
+--- a/CvGameCoreDLL/CvInitCore.cpp
++++ b/CvGameCoreDLL/CvInitCore.cpp
+@@ -1,6 +1,7 @@
+ // game.cpp
+ 
+ #include "CvGameCoreDLL.h"
++#include <filesystem>
+ #include "CvInitCore.h"
+ #include "CvDLLPythonIFaceBase.h"
+ #include "CyArgsList.h"
+@@ -2243,6 +2244,15 @@ void CvInitCore::setPathNames()
+ 		return;
+ 	}
+ 
++#ifndef _WIN32
++	exePath = std::filesystem::current_path().string();
++	exeName = "Civ4BeyondSword.exe";
++	std::string mod = gDLL->getModName();
++	std::replace(mod.begin(), mod.end(), '\\', '/');
++	dllPath = (std::filesystem::current_path() / mod / "Assets").lexically_normal().string();
++	dllName = "CvGameCoreDLL.dll";
++#else
++
+ 	TCHAR pathBuffer[4096];
+ 	DWORD result;
+ 	TCHAR* pos;
+@@ -2275,6 +2285,8 @@ void CvInitCore::setPathNames()
+ 		pos = next;
+ 	}
+ 
++#endif
++
+ 	bPathsSet = true;
+ }
+ // BUG - EXE/DLL Paths - end
+diff --git a/CvGameCoreDLL/CvMap.cpp b/CvGameCoreDLL/CvMap.cpp
+index 65f30a4..9b6d18a 100644
+--- a/CvGameCoreDLL/CvMap.cpp
++++ b/CvGameCoreDLL/CvMap.cpp
+@@ -955,7 +955,10 @@ CvPlot* CvMap::syncRandPlot(int iFlags, int iArea, int iMinUnitDistance, int iTi
+ 
+ 	while (iCount < iTimeout)
+ 	{
+-		pTestPlot = plotSorenINLINE(GC.getGameINLINE().getSorenRandNum(getGridWidthINLINE(), "Rand Plot Width"), GC.getGameINLINE().getSorenRandNum(getGridHeightINLINE(), "Rand Plot Height"));
++		// openciv4: the order Windows draws in (C++ leaves it to the compiler)
++		const int iRandY = GC.getGameINLINE().getSorenRandNum(getGridHeightINLINE(), "Rand Plot Height");
++		const int iRandX = GC.getGameINLINE().getSorenRandNum(getGridWidthINLINE(), "Rand Plot Width");
++		pTestPlot = plotSorenINLINE(iRandX, iRandY);
+ 
+ 		FAssertMsg(pTestPlot != NULL, "TestPlot is not assigned a valid value");
+ 
+diff --git a/CvGameCoreDLL/CvPlayer.cpp b/CvGameCoreDLL/CvPlayer.cpp
+index 8a18386..ab2ddc0 100644
+--- a/CvGameCoreDLL/CvPlayer.cpp
++++ b/CvGameCoreDLL/CvPlayer.cpp
+@@ -1415,8 +1415,11 @@ void CvPlayer::reset(PlayerTypes eID, bool bConstructorCall)
+ //
+ void CvPlayer::logMsg(char* format, ... )
+ {
+-	static char buf[2048];
+-	_vsnprintf( buf, 2048-4, format, (char*)(&format+1) );
++	char buf[2048];
++	va_list args;
++	va_start(args, format);
++	std::vsnprintf(buf, sizeof buf, format, args);
++	va_end(args);
+ 	gDLL->logMsg("sdkDbg.log", buf);
+ }
+ 
+@@ -4072,7 +4075,8 @@ const wchar* CvPlayer::getName(uint uiForm) const
+ // This sets the name of the player, ie Peter or Montezuma
+ void CvPlayer::setName(std::wstring szNewValue)
+ {
+-	if ( isCityNameValid(CvWString(szNewValue), false)) // LFGR_TODO: Why city?
++	CvWString candidate(szNewValue);
++	if (isCityNameValid(candidate, false)) // LFGR_TODO: Why city?
+ 	{
+ 		m_szName = szNewValue;
+ 		gDLL->getInterfaceIFace()->setDirty(Score_DIRTY_BIT, true);
+@@ -4550,7 +4554,7 @@ void CvPlayer::doTurn()
+ 			szBuffer = gDLL->getText("TXT_KEY_MISC_PUPPET_STATE_LEGITIMIZED", getCivilizationDescriptionKey());
+ 			GC.getGameINLINE().addReplayMessage(REPLAY_MESSAGE_MAJOR_EVENT, getID(), szBuffer, getCapitalCity()->getX(), getCapitalCity()->getY(), (ColorTypes)GC.getInfoTypeForString("COLOR_BUILDING_TEXT"));
+ 
+-			for (iI = 0; iI < MAX_PLAYERS; iI++)
++			for (int iI = 0; iI < MAX_PLAYERS; iI++)
+ 			{
+ 				if (GET_PLAYER((PlayerTypes)iI).isAlive())
+ 				{
+@@ -13908,20 +13912,20 @@ void CvPlayer::verifyAlive()
+ 					}
+ 				}
+ 
+-				if(Potentials.size()==0)
++				if (Potentials.empty())
+ 				{
+-					if(GET_PLAYER((PlayerTypes)x).isAlive() && 
+-						!GET_PLAYER((PlayerTypes)x).isHumanDisabled() && 
+-						!GET_PLAYER((PlayerTypes)x).isHuman())
++					for (int x = 0; x < MAX_PLAYERS; ++x)
+ 					{
+-						Potentials.push_back(x);
++						CvPlayer& player = GET_PLAYER(static_cast<PlayerTypes>(x));
++						if (player.isAlive() && !player.isHumanDisabled() && !player.isHuman())
++							Potentials.push_back(x);
+ 					}
+-
+ 				}
+-
+-				int choose = GC.getGame().getSorenRand().get(Potentials.size(), "Picking new player for dead player...");
+-
+-				GC.getGame().changeHumanPlayer((PlayerTypes)getID(), (PlayerTypes)choose);
++				if (!Potentials.empty())
++				{
++					const int choose = GC.getGame().getSorenRand().get(Potentials.size(), "Picking new player for dead player...");
++					GC.getGame().changeHumanPlayer(getID(), static_cast<PlayerTypes>(Potentials[choose]));
++				}
+ 			}
+ /************************************************************************************************/
+ /* REVOLUTION_MOD                          END                                                  */
+@@ -13996,7 +14000,7 @@ void CvPlayer::setTurnActive(bool bNewValue, bool bDoTurn)
+ 				{
+ 					CvWStringBuffer szBuffer;
+ 					GAMETEXT.setScoreHelp(szBuffer, getID());
+-					logBBAI("%S", szBuffer);
++					logBBAI("%ls", szBuffer.getCString());
+ 
+ 					int iGameTurn = GC.getGameINLINE().getGameTurn();
+ 					logBBAI("  Total Score: %d, Population Score: %d (%d total pop), Land Score: %d, Tech Score: %d, Wonder Score: %d", calculateScore(), getPopScore(false), getTotalPopulation(), getLandScore(false), getTechScore(), getWondersScore());
+@@ -20870,9 +20874,9 @@ void CvPlayer::read(FDataStreamBase* pStream)
+ 	ReadStreamableFFreeListTrashArray(m_eventsTriggered, pStream);
+ 
+ 	{
+-		CvMessageQueue::_Alloc::size_type iSize;
++		unsigned int iSize;
+ 		pStream->Read(&iSize);
+-		for (CvMessageQueue::_Alloc::size_type i = 0; i < iSize; i++)
++		for (unsigned int i = 0; i < iSize; i++)
+ 		{
+ 			CvTalkingHeadMessage message;
+ 			message.read(*pStream);
+@@ -20882,9 +20886,9 @@ void CvPlayer::read(FDataStreamBase* pStream)
+ 
+ 	{
+ 		clearPopups();
+-		CvPopupQueue::_Alloc::size_type iSize;
++		unsigned int iSize;
+ 		pStream->Read(&iSize);
+-		for (CvPopupQueue::_Alloc::size_type i = 0; i < iSize; i++)
++		for (unsigned int i = 0; i < iSize; i++)
+ 		{
+ 			CvPopupInfo* pInfo = new CvPopupInfo();
+ 			if (NULL != pInfo)
+@@ -20897,9 +20901,9 @@ void CvPlayer::read(FDataStreamBase* pStream)
+ 
+ 	{
+ 		clearDiplomacy();
+-		CvDiploQueue::_Alloc::size_type iSize;
++		unsigned int iSize;
+ 		pStream->Read(&iSize);
+-		for (CvDiploQueue::_Alloc::size_type i = 0; i < iSize; i++)
++		for (unsigned int i = 0; i < iSize; i++)
+ 		{
+ 			CvDiploParameters* pDiplo = new CvDiploParameters(NO_PLAYER);
+ 			if (NULL != pDiplo)
+@@ -21500,7 +21504,7 @@ void CvPlayer::write(FDataStreamBase* pStream)
+ 	WriteStreamableFFreeListTrashArray(m_eventsTriggered, pStream);
+ 
+ 	{
+-		CvMessageQueue::_Alloc::size_type iSize = m_listGameMessages.size();
++		unsigned int iSize = m_listGameMessages.size();
+ 		pStream->Write(iSize);
+ 		CvMessageQueue::iterator it;
+ 		for (it = m_listGameMessages.begin(); it != m_listGameMessages.end(); ++it)
+@@ -21521,7 +21525,7 @@ void CvPlayer::write(FDataStreamBase* pStream)
+ 		{
+ 			gDLL->getInterfaceIFace()->getDisplayedButtonPopups(currentPopups);
+ 		}
+-		CvPopupQueue::_Alloc::size_type iSize = m_listPopups.size() + currentPopups.size();
++		unsigned int iSize = m_listPopups.size() + currentPopups.size();
+ 		pStream->Write(iSize);
+ 		CvPopupQueue::iterator it;
+ 		for (it = currentPopups.begin(); it != currentPopups.end(); ++it)
+@@ -21543,7 +21547,7 @@ void CvPlayer::write(FDataStreamBase* pStream)
+ 	}
+ 
+ 	{
+-		CvDiploQueue::_Alloc::size_type iSize = m_listDiplomacy.size();
++		unsigned int iSize = m_listDiplomacy.size();
+ 		pStream->Write(iSize);
+ 		CvDiploQueue::iterator it;
+ 		for (it = m_listDiplomacy.begin(); it != m_listDiplomacy.end(); ++it)
+diff --git a/CvGameCoreDLL/CvPlayerAI.cpp b/CvGameCoreDLL/CvPlayerAI.cpp
+index d12f0db..eb65c8f 100644
+--- a/CvGameCoreDLL/CvPlayerAI.cpp
++++ b/CvGameCoreDLL/CvPlayerAI.cpp
+@@ -24416,7 +24416,7 @@ int CvPlayerAI::AI_getReligionVictoryStage() const
+ 		return 0;
+ 	}
+ 
+-	const iStateRel = getStateReligion();
++	const ReligionTypes iStateRel = getStateReligion();
+ 		
+ 	if (iStateRel != NO_RELIGION)
+ 	{
+@@ -30138,7 +30138,7 @@ int CvPlayerAI::AI_secretaryGeneralTradeVal(VoteSourceTypes eVoteSource, PlayerT
+ 		
+ 		int iOurSharedCivics = 0;
+ 		int iTheirSharedCivics = 0;
+-		for (iI = 0; iI < GC.getNumCivicOptionInfos(); iI++)
++		for (int iI = 0; iI < GC.getNumCivicOptionInfos(); iI++)
+ 		{
+ 			if (getCivics((CivicOptionTypes)iI) == GET_PLAYER(ePlayer).getCivics((CivicOptionTypes)iI))
+ 			{
+diff --git a/CvGameCoreDLL/CvPlayerAI.h b/CvGameCoreDLL/CvPlayerAI.h
+index 99db6ec..b8ee1e1 100644
+--- a/CvGameCoreDLL/CvPlayerAI.h
++++ b/CvGameCoreDLL/CvPlayerAI.h
+@@ -6,7 +6,7 @@
+ #define CIV4_PLAYER_AI_H
+ 
+ #include "CvPlayer.h"
+-#include "AI_defines.h"
++#include "AI_Defines.h"
+ 
+ class CvEventTriggerInfo;
+ 
+diff --git a/CvGameCoreDLL/CvPlot.cpp b/CvGameCoreDLL/CvPlot.cpp
+index 2664850..7c56327 100644
+--- a/CvGameCoreDLL/CvPlot.cpp
++++ b/CvGameCoreDLL/CvPlot.cpp
+@@ -2048,7 +2048,9 @@ int CvPlot::seeFromLevel(TeamTypes eTeam) const
+ 
+ 	FAssertMsg(getTerrainType() != NO_TERRAIN, "TerrainType is not assigned a valid value");
+ 
+-	iLevel = GC.getTerrainInfo(getTerrainType()).getSeeFromLevel();
++	// openciv4: map generation updates sight before plots have terrain, and the original code then read
++	// m_paTerrainInfo[-1], memory before the array (a crash with newlib's allocator on the Switch).
++	iLevel = (getTerrainType() == NO_TERRAIN) ? 0 : GC.getTerrainInfo(getTerrainType()).getSeeFromLevel();
+ 
+ 	// Super Forts begin *vision*
+ 	if (getImprovementType() != NO_IMPROVEMENT)
+@@ -2087,7 +2089,9 @@ int CvPlot::seeThroughLevel() const
+ 
+ 	FAssertMsg(getTerrainType() != NO_TERRAIN, "TerrainType is not assigned a valid value");
+ 
+-	iLevel = GC.getTerrainInfo(getTerrainType()).getSeeThroughLevel();
++	// openciv4: map generation updates sight before plots have terrain, and the original code then read
++	// m_paTerrainInfo[-1], memory before the array (a crash with newlib's allocator on the Switch).
++	iLevel = (getTerrainType() == NO_TERRAIN) ? 0 : GC.getTerrainInfo(getTerrainType()).getSeeThroughLevel();
+ 
+ 	if (getFeatureType() != NO_FEATURE)
+ 	{
+@@ -6866,7 +6870,7 @@ CvString CvPlot::pickFeatureDummyTag(int mouseX, int mouseY)
+ 		return gDLL->getFeatureIFace()->pickDummyTag(m_pFeatureSymbol, mouseX, mouseY);
+ 	}
+ 
+-	return NULL;
++	return CvString();
+ }
+ 
+ void CvPlot::resetFeatureModel()
+diff --git a/CvGameCoreDLL/CvPopupInfo.cpp b/CvGameCoreDLL/CvPopupInfo.cpp
+index afde36c..fbd0179 100644
+--- a/CvGameCoreDLL/CvPopupInfo.cpp
++++ b/CvGameCoreDLL/CvPopupInfo.cpp
+@@ -1,5 +1,5 @@
+ #include "CvGameCoreDLL.h"
+-#include ".\cvpopupinfo.h"
++#include "CvPopupInfo.h"
+ 
+ CvPopupInfo::CvPopupInfo(ButtonPopupTypes eButtonPopupType, int iData1, int iData2, int iData3, int iFlags, bool bOption1, bool bOption2) :
+ 	m_iData1(iData1),
+diff --git a/CvGameCoreDLL/CvRandom.cpp b/CvGameCoreDLL/CvRandom.cpp
+index 5b77f73..571db76 100644
+--- a/CvGameCoreDLL/CvRandom.cpp
++++ b/CvGameCoreDLL/CvRandom.cpp
+@@ -60,9 +60,9 @@ unsigned short CvRandom::get(unsigned short usNum, const TCHAR* pszLog)
+ 			if (GC.getGameINLINE().getTurnSlice() > 0)
+ 			{
+ 				TCHAR szOut[1024];
+-				sprintf(szOut, "Rand = %d on %d (%s)\n", getSeed(), GC.getGameINLINE().getTurnSlice(), pszLog);
++				sprintf(szOut, "Rand = %lu on %d (%s)\n", getSeed(), GC.getGameINLINE().getTurnSlice(), pszLog);
+ 				TCHAR szFileName[1024];
+-				sprintf(szFileName, "SynchLog - %S.txt", GET_PLAYER(GC.getGameINLINE().getActivePlayer()).getName());
++				sprintf(szFileName, "SynchLog - %ls.txt", GET_PLAYER(GC.getGameINLINE().getActivePlayer()).getName());
+ 				gDLL->logMsg(szFileName, szOut, false, false);
+ 			}
+ 		}
+diff --git a/CvGameCoreDLL/CvRandom.h b/CvGameCoreDLL/CvRandom.h
+index 6d2f0e5..0b12b44 100644
+--- a/CvGameCoreDLL/CvRandom.h
++++ b/CvGameCoreDLL/CvRandom.h
+@@ -30,7 +30,7 @@ public:
+ 	void setLogging(bool enabled);
+ protected:
+ 
+-	unsigned long m_ulRandomSeed;
++	unsigned int m_ulRandomSeed; // The Windows game and its saves use a 32-bit seed.
+ 	bool enableLogs;
+ };
+ 
+diff --git a/CvGameCoreDLL/CvReplayMessage.cpp b/CvGameCoreDLL/CvReplayMessage.cpp
+index 00b7601..bf3527e 100644
+--- a/CvGameCoreDLL/CvReplayMessage.cpp
++++ b/CvGameCoreDLL/CvReplayMessage.cpp
+@@ -1,5 +1,5 @@
+ #include "CvGameCoreDLL.h"
+-#include ".\cvreplaymessage.h"
++#include "CvReplayMessage.h"
+ 
+ CvReplayMessage::CvReplayMessage(int iTurn, ReplayMessageTypes eType, PlayerTypes ePlayer) :
+ 	m_iTurn(iTurn),
+diff --git a/CvGameCoreDLL/CvSelectionGroupAI.cpp b/CvGameCoreDLL/CvSelectionGroupAI.cpp
+index bf3f49e..68ebc79 100644
+--- a/CvGameCoreDLL/CvSelectionGroupAI.cpp
++++ b/CvGameCoreDLL/CvSelectionGroupAI.cpp
+@@ -9,7 +9,7 @@
+ #include "CvDLLEntityIFaceBase.h"
+ #include "CvGameCoreUtils.h"
+ #include "FProfiler.h"
+-#include "CVInfos.h"
++#include "CvInfos.h"
+ 
+ // Logging
+ #include "BetterBTSAI.h"
+diff --git a/CvGameCoreDLL/CvString.cpp b/CvGameCoreDLL/CvString.cpp
+index 4086a74..79277c2 100644
+--- a/CvGameCoreDLL/CvString.cpp
++++ b/CvGameCoreDLL/CvString.cpp
+@@ -11,132 +11,77 @@ const CvWString DelimWS(L": ");
+ // CvString
+ //
+ 
+-void CvString::Copy(const wchar* w)
++void CvString::Copy(const wchar* source)
+ {
+-	if (w) {
+-		int len = WideCharToMultiByte(CP_ACP, 0, w, -1, NULL, 0, NULL, NULL);
+-		if (len)
+-		{
+-			reserve(len-1);
+-			len = WideCharToMultiByte(CP_ACP, 0, w, -1, const_cast<char *>(c_str()), len, NULL, NULL);
+-			_Eos((len==0) ? 0 : (len-1));
+-		}
+-	}
++	if (!source)
++		return;
++	const int size = WideCharToMultiByte(CP_ACP, 0, source, -1, nullptr, 0, nullptr, nullptr);
++	resize(size);
++	WideCharToMultiByte(CP_ACP, 0, source, -1, data(), size, nullptr, nullptr);
++	if (size)
++		pop_back();
+ }
+ 
+-void CvWString::Copy(const char* s)
++void CvWString::Copy(const char* source)
+ {
+-	if (s) {
+-		int len = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, s, -1, NULL, 0);
+-		if (len)
+-		{
+-			reserve(len-1);
+-			len = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, s, -1, const_cast<wchar *>(c_str()), len);
+-			_Eos((len==0) ? 0 : (len-1));
+-		}
+-	}
++	if (!source)
++		return;
++	const int size = MultiByteToWideChar(CP_ACP, 0, source, -1, nullptr, 0);
++	resize(size);
++	MultiByteToWideChar(CP_ACP, 0, source, -1, data(), size);
++	if (size)
++		pop_back();
+ }
+ 
+-//
+-// static
+-//
+-bool CvString::formatv(CvString& out, const char * fmt, va_list args)
++namespace
+ {
+-	int len = 0;
+-	if(fmt) {
+-		char buf[2048];
+-		len = _vsnprintf(buf, 2048, fmt, args);
+-		if(len >= 0)
+-		{
+-			out.assign(buf, len);
++	template<class String, class Char, class Print>
++	bool formatString(String& out, const Char* format, va_list args, Print print)
++	{
++		out.clear();
++		if (!format)
+ 			return true;
+-		}
+-		else
++		Char initial[2048];
++		for (size_t size = std::size(initial); size <= 131072; size *= 2)
+ 		{
+-			size_t maxlength = (out.capacity() > 4097) ? out.capacity() : 4097;
+-			out._Eos(0);
+-			do
++			std::vector<Char> buffer;
++			Char* data = initial;
++			if (size > std::size(initial))
++			{
++				buffer.resize(size);
++				data = buffer.data();
++			}
++			va_list copy;
++			va_copy(copy, args);
++			const int used = print(data, size, format, copy);
++			va_end(copy);
++			if (used >= 0 && static_cast<size_t>(used) < size)
+ 			{
+-				out.reserve(maxlength);
+-				len = _vsnprintf(const_cast<char *>( out.c_str() ), out.capacity(), fmt, args);
+-				if (len >= 0) // If that worked, return the string.
+-				{
+-					out._Eos(len);
+-					break;
+-				}
+-				if(maxlength >= 81919) // 81920 == 80K limit
+-				{
+-					out.erase();
+-					break;
+-				}
+-				// twice the old size
+-				maxlength += out.capacity() + 1;
+-			} while(true);
++				out.assign(data, used);
++				return true;
++			}
+ 		}
++		return false;
+ 	}
+-	else
+-		out.erase();
+-	return (len >= 0);
+ }
+ 
+-//
+-// static
+-//
+-bool CvWString::formatv(CvWString& out, const wchar * fmt, va_list args)
++bool CvString::formatv(CvString& out, const char* format, va_list args)
+ {
+-	int len = 0;
+-	if(fmt) {
+-		wchar buf[2048];
+-		len = _vsnwprintf(buf, 2048, fmt, args);
+-		if(len >= 0)
+-		{
+-			out.assign(buf, len);
+-			return true;
+-		}
+-		else
+-		{
+-			size_t maxlength = (out.capacity() > 4097) ? out.capacity() : 4097;
+-			out._Eos(0);
+-			do
+-			{
+-				out.reserve(maxlength);
+-				len = _vsnwprintf(const_cast<wchar *>( out.c_str() ), out.capacity(), fmt, args);
+-				if (len >= 0) // If that worked, return the string.
+-				{
+-					out._Eos(len);
+-					break;
+-				}
+-				if(maxlength >= 81919) // 81920 == 80K limit
+-				{
+-					out.erase();
+-					break;
+-				}
+-				// twice the old size
+-				maxlength += out.capacity() + 1;
+-			} while(true);
+-		}
+-	}
+-	else
+-		out.erase();
+-	return (len >= 0);
++	return formatString(out, format, args, std::vsnprintf);
+ }
+ 
+-//
+-// static
+-//
+-bool CvWString::appendfmtv(CvWString& out, const wchar * fmt, va_list args)
++bool CvWString::formatv(CvWString& out, const wchar* format, va_list args)
+ {
+-	int len = 0;
+-	if(fmt) {
+-		len = _vscwprintf(fmt, args);
+-		if(len > 0) {
+-			out.reserve(out.length() + len);
+-			len = _vsnwprintf(const_cast<wchar *>( out.c_str() ) + out.length(), out.capacity()-out.length(), fmt, args);
+-			if( len >= 0 )
+-				out._Eos(out.length() + len);
+-		}
+-	}
+-	return (len >= 0);
++	return formatString(out, format, args, _vsnwprintf);
++}
++
++bool CvWString::appendfmtv(CvWString& out, const wchar* format, va_list args)
++{
++	CvWString text;
++	const bool result = formatv(text, format, args);
++	if (result)
++		out.append(text);
++	return result;
+ }
+ 
+ // Small hash intended for version checking only.
+diff --git a/CvGameCoreDLL/CvString.h b/CvGameCoreDLL/CvString.h
+index bc543be..d89c6df 100644
+--- a/CvGameCoreDLL/CvString.h
++++ b/CvGameCoreDLL/CvString.h
+@@ -58,7 +58,7 @@ public:
+ 	void Copy(const char* s);
+ 	bool IsEmpty() const { return empty();	}
+ 	int CompareNoCase( const wchar* lpsz ) const { return _wcsicmp(lpsz, c_str()); }
+-	int CompareNoCase( const wchar* lpsz, int iLength ) const { return _wcsnicmp(lpsz, c_str(), iLength);  }
++	int CompareNoCase( const wchar* lpsz, int iLength ) const { return wcsncasecmp(lpsz, c_str(), iLength);  }
+ 
+ 	// FString compatibility
+ 	const wchar* GetCString() const	{ return c_str(); }
+@@ -152,12 +152,12 @@ public:
+ 	void append(const char *s)
+ 	{
+ 		if (s) {
+-			int len = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, s, -1, NULL, 0);
++			int len = MultiByteToWideChar(CP_ACP, 0, s, -1, NULL, 0);
+ 			if (len > 1) /*include null*/
+ 			{
+ 				ensureCapacity(m_iLength + len);
+ 				//append wchar data
+-				len = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, s, -1, m_pBuffer + m_iLength, len);
++				len = MultiByteToWideChar(CP_ACP, 0, s, -1, m_pBuffer + m_iLength, len);
+ 				if(len > 1) {
+ 					m_iLength += len - 1;
+ 				}
+@@ -165,24 +165,16 @@ public:
+ 		}
+ 	}
+ 
+-	bool appendfmt(const wchar * fmt, ...)
++	bool appendfmt(const wchar* fmt, ...)
+ 	{
+-		int len = 0;
+-		if(fmt) {
+-			va_list args;
+-			va_start(args, fmt);
+-			len = _vscwprintf(fmt, args);
+-			if(len > 0) {
+-				len += m_iLength + 1/*null*/;
+-				ensureCapacity(len);
+-				len = _vsnwprintf(m_pBuffer + m_iLength, m_iCapacity - len, fmt, args);
+-				if( len >= 0 )
+-					m_iLength += len;
+-				m_pBuffer[m_iLength] = 0; // confirm null terminate
+-			}
+-			va_end(args);
+-		}
+-		return (len >= 0);
++		CvWString text;
++		va_list args;
++		va_start(args, fmt);
++		const bool result = CvWString::formatv(text, fmt, args);
++		va_end(args);
++		if (result)
++			append(text);
++		return result;
+ 	}
+ 
+ 	void assign(const CvWString &s)		{ clear(); append(s.c_str(), s.length()); }
+@@ -204,7 +196,7 @@ public:
+ 				count = m_iLength - off; // trim count
+ 			if (0 < count)
+ 			{	// move elements down
+-				::memcpy(m_pBuffer+off, m_pBuffer+off+count, (m_iLength - (off+count)) * sizeof(wchar));
++				::memmove(m_pBuffer+off, m_pBuffer+off+count, (m_iLength - (off+count)) * sizeof(wchar));
+ 				m_iLength -= count;
+ 				m_pBuffer[m_iLength] = 0; // null terminate
+ 			}
+@@ -244,17 +236,7 @@ private:
+ class CvStaticString : public std::string
+ {
+ public:
+-	CvStaticString(const char* s) : std::string() { if(s) attach(s); }
+-	~CvStaticString() { detach(); }
+-private:
+-	void attach(const char *s)
+-	{
+-		_Myres	= _BUF_SIZE;
+-		_Mysize	= ::strlen(s);
+-		_Bx._Ptr= const_cast<char *>(s);
+-	}
+-	void detach () { _Myres = _Mysize = 0; }
+-	CvStaticString() { }
++	explicit CvStaticString(const char* s) : std::string(s ? s : "") {}
+ };
+ 
+ //
+diff --git a/CvGameCoreDLL/CvTeam.cpp b/CvGameCoreDLL/CvTeam.cpp
+index 951e521..e5b5ad2 100644
+--- a/CvGameCoreDLL/CvTeam.cpp
++++ b/CvGameCoreDLL/CvTeam.cpp
+@@ -533,8 +533,11 @@ void CvTeam::reset(TeamTypes eID, bool bConstructorCall)
+ //
+ void CvTeam::logMsg(char* format, ... )
+ {
+-	static char buf[2048];
+-	_vsnprintf( buf, 2048-4, format, (char*)(&format+1) );
++	char buf[2048];
++	va_list args;
++	va_start(args, format);
++	std::vsnprintf(buf, sizeof buf, format, args);
++	va_end(args);
+ 	gDLL->logMsg("sdkDbg.log", buf);
+ }
+ 
+diff --git a/CvGameCoreDLL/CvTeamAI.cpp b/CvGameCoreDLL/CvTeamAI.cpp
+index 9b73203..d7854f5 100644
+--- a/CvGameCoreDLL/CvTeamAI.cpp
++++ b/CvGameCoreDLL/CvTeamAI.cpp
+@@ -5713,7 +5713,7 @@ void CvTeamAI::AI_doWar()
+ 		return;
+ 	// K-Mod end
+ 
+-	for (iI = 0; iI < MAX_CIV_PLAYERS; iI++)
++	for (int iI = 0; iI < MAX_CIV_PLAYERS; iI++)
+ 	{
+ 		if (GET_PLAYER((PlayerTypes)iI).isAlive())
+ 		{
+@@ -5893,7 +5893,7 @@ void CvTeamAI::AI_doWar()
+ 		int iFinancialTroubleCount = 0;
+ 		int iDaggerCount = 0;
+ 		int iGetBetterUnitsCount = 0;
+-		for (iI = 0; iI < MAX_PLAYERS; iI++)
++		for (int iI = 0; iI < MAX_PLAYERS; iI++)
+ 		{
+ 			if (GET_PLAYER((PlayerTypes)iI).isAlive())
+ 			{
+diff --git a/CvGameCoreDLL/CvUnit.cpp b/CvGameCoreDLL/CvUnit.cpp
+index 462c9e8..b5d93d0 100644
+--- a/CvGameCoreDLL/CvUnit.cpp
++++ b/CvGameCoreDLL/CvUnit.cpp
+@@ -5905,8 +5905,10 @@ bool CvUnit::airBomb(int iX, int iY)
+ 	{
+ 		if (pPlot->getImprovementType() != NO_IMPROVEMENT)
+ 		{
+-			if (GC.getGameINLINE().getSorenRandNum(airBombCurrRate(), "Air Bomb - Offense") >=
+-					GC.getGameINLINE().getSorenRandNum(GC.getImprovementInfo(pPlot->getImprovementType()).getAirBombDefense(), "Air Bomb - Defense"))
++			// openciv4: the order Windows draws in (C++ leaves it to the compiler)
++			const int iBombDefense = GC.getGameINLINE().getSorenRandNum(GC.getImprovementInfo(pPlot->getImprovementType()).getAirBombDefense(), "Air Bomb - Defense");
++			const int iBombOffense = GC.getGameINLINE().getSorenRandNum(airBombCurrRate(), "Air Bomb - Offense");
++			if (iBombOffense >= iBombDefense)
+ 			{
+ 				szBuffer = gDLL->getText("TXT_KEY_MISC_YOU_UNIT_DESTROYED_IMP", getNameKey(), GC.getImprovementInfo(pPlot->getImprovementType()).getTextKeyWide());
+ 				gDLL->getInterfaceIFace()->addMessage(getOwnerINLINE(), true, GC.getEVENT_MESSAGE_TIME(), szBuffer, "AS2D_PILLAGE", MESSAGE_TYPE_INFO, getButton(), (ColorTypes)GC.getInfoTypeForString("COLOR_GREEN"), pPlot->getX_INLINE(), pPlot->getY_INLINE());
+@@ -9156,7 +9158,7 @@ CvCity* CvUnit::getUpgradeCity(UnitTypes eUnit, bool bSearch, int* iSearchValue)
+ 
+ 	if (eUnit == NO_UNIT)
+ 	{
+-		return false;
++		return NULL;
+ 	}
+ 
+ 	CvPlayerAI& kPlayer = GET_PLAYER(getOwnerINLINE());
+@@ -9173,7 +9175,7 @@ CvCity* CvUnit::getUpgradeCity(UnitTypes eUnit, bool bSearch, int* iSearchValue)
+ 		{
+             if (GC.getCivilizationInfo(kPlayer.getCivilizationType()).getCivilizationUnits(kUnitInfo.getUnitClassType()) != eUnit)
+ 			{
+-                return false;
++                return nullptr;
+ 			}
+ 		}
+     }
+@@ -9181,19 +9183,19 @@ CvCity* CvUnit::getUpgradeCity(UnitTypes eUnit, bool bSearch, int* iSearchValue)
+     {
+         if (GC.getCivilizationInfo((CivilizationTypes)m_pUnitInfo->getUpgradeCiv()).getCivilizationUnits(kUnitInfo.getUnitClassType()) != eUnit)
+         {
+-            return false;
++            return nullptr;
+         }
+     }
+ //FfH: End Modify
+ 
+ 	if (!upgradeAvailable(getUnitType(), ((UnitClassTypes)(kUnitInfo.getUnitClassType()))))
+ 	{
+-		return false;
++		return NULL;
+ 	}
+ 
+ 	if (kUnitInfo.getCargoSpace() < getCargo())
+ 	{
+-		return false;
++		return NULL;
+ 	}
+ 
+ 	CLLNode<IDInfo>* pUnitNode = plot()->headUnitNode();
+@@ -9208,7 +9210,7 @@ CvCity* CvUnit::getUpgradeCity(UnitTypes eUnit, bool bSearch, int* iSearchValue)
+ 			{
+ 				if (kUnitInfo.getSpecialCargo() != pLoopUnit->getSpecialUnitType())
+ 				{
+-					return false;
++					return NULL;
+ 				}
+ 			}
+ 
+@@ -9216,7 +9218,7 @@ CvCity* CvUnit::getUpgradeCity(UnitTypes eUnit, bool bSearch, int* iSearchValue)
+ 			{
+ 				if (kUnitInfo.getDomainCargo() != pLoopUnit->getDomainType())
+ 				{
+-					return false;
++					return NULL;
+ 				}
+ 			}
+ 		}
+@@ -9336,7 +9338,7 @@ CvCity* CvUnit::getUpgradeCity(UnitTypes eUnit, bool bSearch, int* iSearchValue)
+ 			{
+ 				if (GC.getCivilizationInfo(pClosestCity->getCivilizationType()).getCivilizationUnits(kUnitInfo.getUnitClassType()) != eUnit && GC.getCivilizationInfo(kPlayer.getCivilizationType()).getCivilizationUnits(kUnitInfo.getUnitClassType()) != eUnit)
+ 				{
+-					return false;
++					return nullptr;
+ 				}
+ 			}
+ 			if (pClosestCity->canUpgrade(eUnit, false, false, true))
+diff --git a/CvGameCoreDLL/CvUnitAI.cpp b/CvGameCoreDLL/CvUnitAI.cpp
+index d446b19..c00b792 100644
+--- a/CvGameCoreDLL/CvUnitAI.cpp
++++ b/CvGameCoreDLL/CvUnitAI.cpp
+@@ -14991,7 +14991,7 @@ bool CvUnitAI::AI_spreadCorporation()
+ 
+ 	CorporationTypes eCorporation = NO_CORPORATION;
+ 
+-	for (int iI = 0; iI < GC.getNumCorporationInfos(); ++iI)
++	int iI; for (iI = 0; iI < GC.getNumCorporationInfos(); ++iI)
+ 	{
+ 		if (m_pUnitInfo->getCorporationSpreads((CorporationTypes)iI) > 0)
+ 		{
+@@ -15004,7 +15004,7 @@ bool CvUnitAI::AI_spreadCorporation()
+ 	{
+ 		return false;
+ 	}
+-	bool bHasHQ = (GET_TEAM(getTeam()).hasHeadquarters((CorporationTypes)iI));
++	bool bHasHQ = GET_TEAM(getTeam()).hasHeadquarters(eCorporation);
+ 
+ 	int iBestValue = 0;
+ 	CvPlot* pBestPlot = NULL;
+diff --git a/CvGameCoreDLL/CvXMLLoadUtility.cpp b/CvGameCoreDLL/CvXMLLoadUtility.cpp
+index f38a144..c02956b 100644
+--- a/CvGameCoreDLL/CvXMLLoadUtility.cpp
++++ b/CvGameCoreDLL/CvXMLLoadUtility.cpp
+@@ -23,18 +23,15 @@ static const int kBufSize = 2048;
+ //
+ // for logging
+ //
+-#ifdef _DEBUG
+-void CvXMLLoadUtility::logMsg(char* format, ... )
++void CvXMLLoadUtility::logMsg(const char* format, ...)
+ {
+-	{
+-		static char buf[kBufSize];
+-		_vsnprintf( buf, kBufSize-4, format, (char*)(&format+1) );
+-		gDLL->logMsg("xml.log", buf);
+-	}
++	char buffer[kBufSize];
++	va_list args;
++	va_start(args, format);
++	std::vsnprintf(buffer, sizeof buffer, format, args);
++	va_end(args);
++	gDLL->logMsg("xml.log", buffer);
+ }
+-#else
+-inline void CvXMLLoadUtility::logMsg(char* format, ... ) { }
+-#endif
+ 
+ bool CvXMLLoadUtility::CreateFXml()
+ {
+@@ -121,7 +118,7 @@ void CvXMLLoadUtility::ResetGlobalEffectInfo()
+ 
+ 	GC.getEffectInfo().clear();
+ 
+-	LoadGlobalClassInfo(GC.getEffectInfo(), "CIV4EffectInfos", "Misc", "Civ4EffectInfos/EffectInfos/EffectInfo", false, false);
++	LoadGlobalClassInfo(GC.getEffectInfo(), "CIV4EffectInfos", "Misc", "Civ4EffectInfos/EffectInfos/EffectInfo", false, NULL);
+ }
+ 
+ 
+diff --git a/CvGameCoreDLL/CvXMLLoadUtility.h b/CvGameCoreDLL/CvXMLLoadUtility.h
+index ecfc5c7..f4924e6 100644
+--- a/CvGameCoreDLL/CvXMLLoadUtility.h
++++ b/CvGameCoreDLL/CvXMLLoadUtility.h
+@@ -18,6 +18,8 @@
+ //#include "CvStructs.h"
+ #include "CvInfos.h"
+ #include "CvGlobals.h"
++#include "CvDLLXMLIFaceBase.h"	// openciv4: the templates below use these at definition
++#include "FVariableSystem.h"
+ 
+ class FXmlSchemaCache;
+ class FXml;
+@@ -316,7 +318,7 @@ private:
+ 	const CvWString &CreateKeyStringFromKBCode(const TCHAR* pszHotKey);
+ 
+ 	void orderHotkeyInfo(int** ppiSortedIndex, int* pHotkeyIndex, int iLength);
+-	void logMsg(char* format, ... );
++	void logMsg(const char* format, ... );
+ };
+ 
+ #ifdef _USRDLL
+diff --git a/CvGameCoreDLL/CvXMLLoadUtilitySet.cpp b/CvGameCoreDLL/CvXMLLoadUtilitySet.cpp
+index ca0c63c..924e6b1 100644
+--- a/CvGameCoreDLL/CvXMLLoadUtilitySet.cpp
++++ b/CvGameCoreDLL/CvXMLLoadUtilitySet.cpp
+@@ -1781,7 +1781,7 @@ void CvXMLLoadUtility::SetGlobalClassInfo(std::vector<T*>& aInfos, const char* s
+ 				gDLL->getXMLIFace()->SetToChild(m_pFXml);
+ 
+ 				// loop through each tag
+-				for (std::vector<T*>::iterator it = aInfos.begin(); it != aInfos.end(); ++it)
++				for (typename std::vector<T*>::iterator it = aInfos.begin(); it != aInfos.end(); ++it)
+ 				{
+ 					SkipToNextVal();	// skip to the next non-comment node
+ 
+diff --git a/CvGameCoreDLL/CyCity.cpp b/CvGameCoreDLL/CyCity.cpp
+index 4ac78dc..08b5ce8 100644
+--- a/CvGameCoreDLL/CyCity.cpp
++++ b/CvGameCoreDLL/CyCity.cpp
+@@ -2957,7 +2957,7 @@ int CyCity::getAltarLevel()
+ //*** Assimilated city produces a unit with original civilization artstyle.
+ const TCHAR* CyCity::getUnitArtStyleButton(int /*UnitTypes*/ eUnit) const
+ {
+-	return m_pCity ? m_pCity->getUnitArtStyleButton((UnitTypes)eUnit) : TEXT("");
++	return m_pCity ? m_pCity->getUnitArtStyleButton((UnitTypes)eUnit) : "";
+ }
+ //<<<<Unofficial Bug Fix: End Add
+ 
+diff --git a/CvGameCoreDLL/CyCityInterface1.cpp b/CvGameCoreDLL/CyCityInterface1.cpp
+index 2e16838..a197183 100644
+--- a/CvGameCoreDLL/CyCityInterface1.cpp
++++ b/CvGameCoreDLL/CyCityInterface1.cpp
+@@ -1,4 +1,5 @@
+ #include "CvGameCoreDLL.h"
++#include "CyUnit.h"	// openciv4: pybind11 needs complete types
+ #include "CyCity.h"
+ #include "CyPlot.h"
+ #include "CyArea.h"
+diff --git a/CvGameCoreDLL/CyEnumsInterface.cpp b/CvGameCoreDLL/CyEnumsInterface.cpp
+index 8c4d6f0..1da8925 100644
+--- a/CvGameCoreDLL/CyEnumsInterface.cpp
++++ b/CvGameCoreDLL/CyEnumsInterface.cpp
+@@ -1,7 +1,7 @@
+ #include "CvGameCoreDLL.h"
+ #include"CvEnums.h"
+ 
+-#include "CvGameCoreDLLUnDefNew.h"
++#include "CvGameCoreDLLUndefNew.h"
+ # include <boost/python/enum.hpp>
+ #include "CvGameCoreDLLDefNew.h"
+ 
+diff --git a/CvGameCoreDLL/CyGameInterface.cpp b/CvGameCoreDLL/CyGameInterface.cpp
+index 9625976..ad173b9 100644
+--- a/CvGameCoreDLL/CyGameInterface.cpp
++++ b/CvGameCoreDLL/CyGameInterface.cpp
+@@ -1,4 +1,5 @@
+ #include "CvGameCoreDLL.h"
++#include "CyPlot.h"	// openciv4: pybind11 needs complete types
+ #include "CyGame.h"
+ #include "CvRandom.h"
+ #include "CyCity.h"
+diff --git a/CvGameCoreDLL/CyGameTextMgrInterface.cpp b/CvGameCoreDLL/CyGameTextMgrInterface.cpp
+index ca2ac84..a03b3ef 100644
+--- a/CvGameCoreDLL/CyGameTextMgrInterface.cpp
++++ b/CvGameCoreDLL/CyGameTextMgrInterface.cpp
+@@ -1,5 +1,7 @@
+ #include "CvGameCoreDLL.h"
+ #include "CyGameTextMgr.h"
++#include "CyUnit.h"	// openciv4: pybind11 needs complete types
++#include "CyDeal.h"
+ 
+ //
+ // published python interface for CyGameTextMgr
+diff --git a/CvGameCoreDLL/CyGlobalContextInterface4.cpp b/CvGameCoreDLL/CyGlobalContextInterface4.cpp
+index bd03b69..5dad251 100644
+--- a/CvGameCoreDLL/CyGlobalContextInterface4.cpp
++++ b/CvGameCoreDLL/CyGlobalContextInterface4.cpp
+@@ -48,7 +48,7 @@ void CyGlobalContextPythonInterface4(python::class_<CyGlobalContext>& x)
+ 		.def("getNumReligionInfos", &CyGlobalContext::getNumReligionInfos, "() - Total Religion Infos XML\\GameInfo\\CIV4ReligionInfos.xml")
+ 		.def("getReligionInfo", &CyGlobalContext::getReligionInfo, python::return_value_policy<python::reference_existing_object>(), "(ReligionID) - CvInfo for ReligionID")
+ 
+-		.def("getNumCorporationInfos", &CyGlobalContext::getNumCorporationInfos, "() - Total Religion Infos XML\\GameInfo\\CIV4CorporationInfos.xml")
++		.def("getNumCorporationInfos", &CyGlobalContext::getNumCorporationInfos, "() - Total Corporation Infos XML\\GameInfo\\CIV4CorporationInfos.xml")
+ 		.def("getCorporationInfo", &CyGlobalContext::getCorporationInfo, python::return_value_policy<python::reference_existing_object>(), "(CorporationID) - CvInfo for CorporationID")
+ 
+ 		.def("getNumVictoryInfos", &CyGlobalContext::getNumVictoryInfos, "() - Total Victory Infos XML\\GameInfo\\CIV4VictoryInfos.xml")
+diff --git a/CvGameCoreDLL/CyInfoInterface3.cpp b/CvGameCoreDLL/CyInfoInterface3.cpp
+index 0be93b6..0193d55 100644
+--- a/CvGameCoreDLL/CyInfoInterface3.cpp
++++ b/CvGameCoreDLL/CyInfoInterface3.cpp
+@@ -825,7 +825,7 @@ void CyInfoPythonInterface3()
+ 		.def("getTechMinTurnsLeft", &CvEventInfo::getTechMinTurnsLeft, "int ()")
+ 		.def("getPrereqTech", &CvEventInfo::getPrereqTech, "int ()")
+ 		.def("getUnitClass", &CvEventInfo::getUnitClass, "int ()")
+-		.def("getNumUnits", &CvEventTriggerInfo::getNumUnits, "int ()")
++		.def("getNumUnits", &CvEventInfo::getNumUnits, "int ()")	// openciv4: was bound to CvEventTriggerInfo::getNumUnits
+ 		.def("getBuildingClass", &CvEventInfo::getBuildingClass, "int ()")
+ 		.def("getBuildingChange", &CvEventInfo::getBuildingChange, "int ()")
+ 		.def("getHappy", &CvEventInfo::getHappy, "int ()")
+diff --git a/CvGameCoreDLL/CyMap.cpp b/CvGameCoreDLL/CyMap.cpp
+index d054659..e951b9a 100644
+--- a/CvGameCoreDLL/CyMap.cpp
++++ b/CvGameCoreDLL/CyMap.cpp
+@@ -3,7 +3,7 @@
+ //
+ 
+ #include "CvGameCoreDLL.h"
+-#include "cyMap.h"
++#include "CyMap.h"
+ #include "CyPlot.h"
+ #include "CvMap.h"
+ #include "CyCity.h"
+diff --git a/CvGameCoreDLL/CyMapGeneratorInterface.cpp b/CvGameCoreDLL/CyMapGeneratorInterface.cpp
+index 70c6db2..78c026c 100644
+--- a/CvGameCoreDLL/CyMapGeneratorInterface.cpp
++++ b/CvGameCoreDLL/CyMapGeneratorInterface.cpp
+@@ -1,5 +1,6 @@
+ #include "CvGameCoreDLL.h"
+ #include "CyMapGenerator.h"
++#include "CyPlot.h"	// openciv4: pybind11 needs complete types
+ //#include "CvStructs.h"
+ //# include <boost/python/manage_new_object.hpp>
+ //# include <boost/python/return_value_policy.hpp>
+diff --git a/CvGameCoreDLL/CyPlayer.cpp b/CvGameCoreDLL/CyPlayer.cpp
+index 3a93d2b..75b3090 100644
+--- a/CvGameCoreDLL/CyPlayer.cpp
++++ b/CvGameCoreDLL/CyPlayer.cpp
+@@ -180,7 +180,7 @@ CyUnit* CyPlayer::initUnit(int /*UnitTypes*/ iIndex, int iX, int iY, UnitAITypes
+ 
+ void CyPlayer::disbandUnit(bool bAnnounce)
+ {
+-	return m_pPlayer ? m_pPlayer->disbandUnit(bAnnounce) : NULL;
++	if (m_pPlayer) m_pPlayer->disbandUnit(bAnnounce);
+ }
+ 
+ void CyPlayer::killUnits()
+@@ -392,12 +392,12 @@ std::wstring CyPlayer::getStateReligionKey( )
+ 
+ std::wstring CyPlayer::getBestAttackUnitName(int iForm)
+ {
+-	return m_pPlayer ? m_pPlayer->getBestAttackUnitName((uint)iForm) : std::wstring();
++	return m_pPlayer ? std::wstring(m_pPlayer->getBestAttackUnitName((uint)iForm)) : std::wstring();
+ }
+ 
+ std::wstring CyPlayer::getWorstEnemyName()
+ {
+-	return m_pPlayer ? m_pPlayer->getWorstEnemyName() : std::wstring();
++	return m_pPlayer ? std::wstring(m_pPlayer->getWorstEnemyName()) : std::wstring();
+ }
+ 
+ std::wstring CyPlayer::getBestAttackUnitKey()
+@@ -838,13 +838,13 @@ bool CyPlayer::canDoCivics(int /*CivicTypes*/ eCivic)
+ 
+ bool CyPlayer::canRevolution(int /*CivicTypes**/ paeNewCivics)
+ {
+-	return m_pPlayer ? m_pPlayer->canRevolution((CivicTypes*)paeNewCivics) : false;
++	return m_pPlayer ? m_pPlayer->canRevolution((CivicTypes*)(intptr_t)paeNewCivics)	/* openciv4: scripts pass 0 (NULL) */ : false;
+ }
+ 
+ void CyPlayer::revolution(int /*CivicTypes**/ paeNewCivics, bool bForce)
+ {
+ 	if (m_pPlayer)
+-		m_pPlayer->revolution((CivicTypes*)paeNewCivics, bForce);
++		m_pPlayer->revolution((CivicTypes*)(intptr_t)paeNewCivics, bForce);	// openciv4: scripts pass 0 (NULL)
+ }
+ 
+ int CyPlayer::getCivicPercentAnger(int /*CivicTypes*/ eCivic)
+@@ -2862,7 +2862,8 @@ void CyPlayer::setGreatPeopleThresholdModifier(int iNewValue)
+ 
+ void CyPlayer::setHasTrait(int /*TraitTypes*/ iIndex, bool bNewValue)
+ {
+-	return m_pPlayer ? m_pPlayer->setHasTrait((TraitTypes) iIndex, bNewValue) : false;
++	if (m_pPlayer)
++		m_pPlayer->setHasTrait((TraitTypes)iIndex, bNewValue);
+ }
+ //FfH: End Add
+ 
+diff --git a/CvGameCoreDLL/CyTeamInterface.cpp b/CvGameCoreDLL/CyTeamInterface.cpp
+index d8a6968..d4f4027 100644
+--- a/CvGameCoreDLL/CyTeamInterface.cpp
++++ b/CvGameCoreDLL/CyTeamInterface.cpp
+@@ -209,7 +209,7 @@ void CyTeamPythonInterface()
+ 		.def("getProjectMaking", &CyTeam::getProjectMaking, "bool (int /*ProjectTypes*/ eIndex)")
+ 		.def("getUnitClassCount", &CyTeam::getUnitClassCount, "int (int (UnitClassTypes) eIndex)")
+ 		.def("isUnitClassMaxedOut", &CyTeam::isUnitClassMaxedOut, "bool (int (UnitClassTypes) eIndex, int iExtra)")
+-		.def("getBuildingClassCount", &CyTeam::getBuildingClassCount, "bool (int /*BuildingClassTypes*/ eIndex)")
++		.def("getBuildingClassCount", &CyTeam::getBuildingClassCount, "int (int /*BuildingClassTypes*/ eIndex)")
+ 		.def("isBuildingClassMaxedOut", &CyTeam::isBuildingClassMaxedOut, "bool (BuildingClassTypes, iExtra)")
+ 		.def("getObsoleteBuildingCount", &CyTeam::getObsoleteBuildingCount)
+ 		.def("isObsoleteBuilding", &CyTeam::isObsoleteBuilding, "bool (BuildingID - is BuildingID obsolete?")
+diff --git a/CvGameCoreDLL/CyUnit.cpp b/CvGameCoreDLL/CyUnit.cpp
+index 697eb9c..f04fc4d 100644
+--- a/CvGameCoreDLL/CyUnit.cpp
++++ b/CvGameCoreDLL/CyUnit.cpp
+@@ -77,7 +77,7 @@ void CyUnit::doCommand(CommandTypes eCommand, int iData1, int iData2)
+ 
+ CyPlot* CyUnit::getPathEndTurnPlot()
+ {
+-	return m_pUnit ? new CyPlot(m_pUnit->getPathEndTurnPlot()) : false;
++	return m_pUnit ? new CyPlot(m_pUnit->getPathEndTurnPlot()) : NULL;
+ }
+ 
+ bool CyUnit::generatePath(CyPlot* pToPlot, int iFlags, bool bReuse, int* piPathTurns)
+@@ -265,7 +265,7 @@ bool CyUnit::canAirBombAt(CyPlot* pPlot, int iX, int iY)
+ 
+ CyCity* CyUnit::bombardTarget(CyPlot* pPlot)
+ {
+-	return m_pUnit ? new CyCity(m_pUnit->bombardTarget(pPlot->getPlot())) : false;
++	return m_pUnit ? new CyCity(m_pUnit->bombardTarget(pPlot->getPlot())) : NULL;
+ }
+ 
+ bool CyUnit::canBombard(CyPlot* pPlot)
+@@ -576,7 +576,7 @@ bool CyUnit::canBuildRoute()
+ 
+ int /*BuildTypes*/ CyUnit::getBuildType()
+ {
+-	return (int) m_pUnit ? m_pUnit->getBuildType() : (int) NO_BUILD;
++	return m_pUnit ? (int) m_pUnit->getBuildType() : (int) NO_BUILD;	// openciv4: was (int) m_pUnit ? ..., truncating the pointer on x64
+ }
+ 
+ int CyUnit::workRate(bool bMax)
+@@ -789,7 +789,7 @@ int CyUnit::airCombatDamage(CyUnit* pDefender)
+ 
+ CyUnit* CyUnit::bestInterceptor(CyPlot* pPlot)
+ {
+-	return m_pUnit ? new CyUnit(m_pUnit->bestInterceptor(pPlot->getPlot())) : false;
++	return m_pUnit ? new CyUnit(m_pUnit->bestInterceptor(pPlot->getPlot())) : NULL;
+ }
+ 
+ bool CyUnit::isAutomated()
+diff --git a/CvGameCoreDLL/CyUnitInterface1.cpp b/CvGameCoreDLL/CyUnitInterface1.cpp
+index 6bbdcd6..8e22629 100644
+--- a/CvGameCoreDLL/CyUnitInterface1.cpp
++++ b/CvGameCoreDLL/CyUnitInterface1.cpp
+@@ -80,8 +80,8 @@ void CyUnitPythonInterface1(python::class_<CyUnit>& x)
+ 		.def("canRecon", &CyUnit::canRecon, "bool ()")
+ 		.def("canReconAt", &CyUnit::canReconAt, "bool (CyPlot* pPlot, int iX, int iY)")
+ 
+-		.def("canRecon", &CyUnit::canParadrop, "bool ()")
+-		.def("canReconAt", &CyUnit::canParadropAt, "bool (CyPlot* pPlot, int iX, int iY)")
++		.def("canParadrop", &CyUnit::canParadrop, "bool ()")
++		.def("canParadropAt", &CyUnit::canParadropAt, "bool (CyPlot* pPlot, int iX, int iY)")
+ 
+ 		.def("canAirBomb", &CyUnit::canAirBomb, "bool ()")
+ 		.def("canAirBombAt", &CyUnit::canAirBombAt, "bool (CyPlot* pPlot, int iX, int iY)")
+diff --git a/CvGameCoreDLL/FAssert.cpp b/CvGameCoreDLL/FAssert.cpp
+index f37bd9d..72e7e1c 100644
+--- a/CvGameCoreDLL/FAssert.cpp
++++ b/CvGameCoreDLL/FAssert.cpp
+@@ -1,4 +1,4 @@
+-#include "CvGameCoreDll.h"
++#include "CvGameCoreDLL.h"
+ 
+ #if defined(FASSERT_ENABLE) && defined(WIN32)
+ 
+diff --git a/CvGameCoreDLL/FAssert.h b/CvGameCoreDLL/FAssert.h
+index af213d7..7f28495 100644
+--- a/CvGameCoreDLL/FAssert.h
++++ b/CvGameCoreDLL/FAssert.h
+@@ -6,7 +6,8 @@
+ // Only compile in FAssert's if FASSERT_ENABLE is defined.  By default, however, let's key off of
+ // _DEBUG.  Sometimes, however, it's useful to enable asserts in release builds, and you can do that
+ // simply by changing the following lines to define FASSERT_ENABLE or using project settings to override
+-#ifdef _DEBUG
++// openciv4: FAssertDlg lives in the game core and isn't exported, so the engine builds without asserts.
++#if defined _DEBUG && !defined OC4_GAMECORE_IMPORT
+ #define FASSERT_ENABLE
+ #endif 
+ 
+@@ -22,7 +23,7 @@ bool FAssertDlg( const char*, const char*, const char*, unsigned int, bool& );
+ 	if( !bIgnoreAlways && !(expr) ) \
+ { \
+ 	if( FAssertDlg( #expr, 0, __FILE__, __LINE__, bIgnoreAlways ) ) \
+-{ _asm int 3 } \
++{ __debugbreak(); } \
+ } \
+ }
+ 
+@@ -32,7 +33,7 @@ bool FAssertDlg( const char*, const char*, const char*, unsigned int, bool& );
+ 	if( !bIgnoreAlways && !(expr) ) \
+ { \
+ 	if( FAssertDlg( #expr, msg, __FILE__, __LINE__, bIgnoreAlways ) ) \
+-{ _asm int 3 } \
++{ __debugbreak(); } \
+ } \
+ }
+ 
+diff --git a/CvGameCoreDLL/FDataStreamBase.h b/CvGameCoreDLL/FDataStreamBase.h
+index 2d53375..573d062 100644
+--- a/CvGameCoreDLL/FDataStreamBase.h
++++ b/CvGameCoreDLL/FDataStreamBase.h
+@@ -109,6 +109,12 @@ public:
+ 
+ 	virtual void		Write(double value) = 0;
+ 	virtual void		Write(int count, const double values[]) = 0;
++
++#ifdef _WIN64
++	// openciv4: container sizes were 32-bit on the original x86 build; keep the
++	// save format by writing size_t as 4 bytes (non-virtual, vtable unchanged).
++	void				Write(size_t value) { Write(static_cast<unsigned int>(value)); }
++#endif
+ };
+ 
+ #endif	//FDATASTREAMBASE_H
+diff --git a/CvGameCoreDLL/FDialogTemplate.cpp b/CvGameCoreDLL/FDialogTemplate.cpp
+index e5d52df..aaf8dba 100644
+--- a/CvGameCoreDLL/FDialogTemplate.cpp
++++ b/CvGameCoreDLL/FDialogTemplate.cpp
+@@ -1,4 +1,4 @@
+-#include "CvGameCoreDll.h"
++#include "CvGameCoreDLL.h"
+ #include "FDialogTemplate.h"
+ #include "CvGameCoreDLLUndefNew.h"
+ 
+diff --git a/CvGameCoreDLL/FFreeListArray.h b/CvGameCoreDLL/FFreeListArray.h
+index 8330c66..9783305 100644
+--- a/CvGameCoreDLL/FFreeListArray.h
++++ b/CvGameCoreDLL/FFreeListArray.h
+@@ -25,6 +25,16 @@
+ template <class T>
+ class FFreeListArray : public FFreeListArrayBase<T>
+ {
++	// openciv4: names from the dependent base, which VC7.1 found on its own
++	using FFreeListArrayBase<T>::m_iFreeListHead;
++	using FFreeListArrayBase<T>::m_iFreeListCount;
++	using FFreeListArrayBase<T>::m_iLastIndex;
++	using FFreeListArrayBase<T>::m_iNumSlots;
++public:
++	using FFreeListArrayBase<T>::getIndexAfterLast;
++	using FFreeListArrayBase<T>::getCount;
++protected:
++
+ public:
+ 
+ 	FFreeListArray();
+@@ -68,7 +78,7 @@ protected:
+ template <class T>
+ FFreeListArray<T>::FFreeListArray()
+ {
+-	m_iFreeListHead = FFreeList::FLA_FREE_LIST_INDEX;
++	m_iFreeListHead = FFreeList::FREE_LIST_INDEX;
+ 	m_iFreeListCount = 0;
+ 	m_iLastIndex = FFreeList::INVALID_INDEX;
+ 	m_iNumSlots = 0;
+@@ -91,7 +101,7 @@ void FFreeListArray<T>::init(int iNumSlots)
+ 
+ 	uninit();
+ 
+-	m_iFreeListHead = FLA_FREE_LIST_INDEX;
++	m_iFreeListHead = FFreeList::FREE_LIST_INDEX;
+ 	m_iFreeListCount = 0;
+ 	m_iLastIndex = FFreeList::INVALID_INDEX;
+ 	m_iNumSlots = iNumSlots;
+@@ -192,7 +202,7 @@ void FFreeListArray<T>::insertAt(T data, int iIndex)
+ 
+ 	m_pArray[iIndex].data = data;
+ 
+-	if (m_iFreeListHead != FLA_FREE_LIST_INDEX)
++	if (m_iFreeListHead != FFreeList::FREE_LIST_INDEX)
+ 	{
+ 		if (iIndex == m_iFreeListHead)
+ 		{
+@@ -202,7 +212,7 @@ void FFreeListArray<T>::insertAt(T data, int iIndex)
+ 		else
+ 		{
+ 			iTempIndex = m_iFreeListHead;
+-			while (iTempIndex != FLA_FREE_LIST_INDEX)
++			while (iTempIndex != FFreeList::FREE_LIST_INDEX)
+ 			{
+ 				assert(iTempIndex != FFreeList::INVALID_INDEX);
+ 				if (m_pArray[iTempIndex].iNextFreeIndex == iIndex)
+@@ -347,7 +357,7 @@ void FFreeListArray<T>::removeAll()
+ 		return;
+ 	}
+ 
+-	m_iFreeListHead = FLA_FREE_LIST_INDEX;
++	m_iFreeListHead = FFreeList::FREE_LIST_INDEX;
+ 	m_iFreeListCount = 0;
+ 	m_iLastIndex = FFreeList::INVALID_INDEX;
+ 
+diff --git a/CvGameCoreDLL/FFreeListTrashArray.h b/CvGameCoreDLL/FFreeListTrashArray.h
+index 31dd960..82cc97e 100644
+--- a/CvGameCoreDLL/FFreeListTrashArray.h
++++ b/CvGameCoreDLL/FFreeListTrashArray.h
+@@ -31,6 +31,16 @@
+ template <class T>
+ class FFreeListTrashArray : public FFreeListArrayBase<T>
+ {
++	// openciv4: names from the dependent base, which VC7.1 found on its own
++	using FFreeListArrayBase<T>::m_iFreeListHead;
++	using FFreeListArrayBase<T>::m_iFreeListCount;
++	using FFreeListArrayBase<T>::m_iLastIndex;
++	using FFreeListArrayBase<T>::m_iNumSlots;
++public:
++	using FFreeListArrayBase<T>::getIndexAfterLast;
++	using FFreeListArrayBase<T>::getCount;
++protected:
++
+ public:
+ 
+ 	FFreeListTrashArray();

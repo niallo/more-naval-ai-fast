@@ -21,3 +21,5 @@ PythonDbg.log
 PythonErr.log
 AutoVerify.ini
 CivilizationIV.ini
+
+/build/openciv4/
